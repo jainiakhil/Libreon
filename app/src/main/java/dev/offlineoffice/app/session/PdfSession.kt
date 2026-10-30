@@ -68,6 +68,9 @@ class PdfSession(override val tabId: String) : DocumentSession, SaveAdvice {
     /** Page content was rewritten since load, so saves must be full rather than incremental. */
     private var contentEdited = false
 
+    /** The source ends in a classic xref table, so PDFium's incremental output is well-formed. */
+    private var incrementalSafe = false
+
     /** Restored position, consumed once by the viewer. */
     var initialPage = 0
         private set
@@ -89,6 +92,7 @@ class PdfSession(override val tabId: String) : DocumentSession, SaveAdvice {
     override suspend fun load(file: File, viewState: String?) = withContext(thread) {
         val snapshot = File(file.parentFile, ".pdf-open-${System.nanoTime()}.pdf")
         file.copyTo(snapshot, overwrite = true)
+        incrementalSafe = PdfXref.endsWithClassicXref(snapshot)
         viewState?.let {
             val json = JSONObject(it)
             initialPage = json.optInt("page")
@@ -245,7 +249,7 @@ class PdfSession(override val tabId: String) : DocumentSession, SaveAdvice {
             checkNotNull(lockedSnapshot) { "session closed" }.copyTo(target, overwrite = true)
             return@withContext
         }
-        doc.saveTo(target, incremental = !contentEdited)
+        doc.saveTo(target, incremental = !contentEdited && incrementalSafe)
     }
 
     override fun markSaved() {

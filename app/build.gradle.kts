@@ -63,6 +63,9 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
+    testImplementation(libs.junit)
+    // The platform org.json is a stub on the JVM; tests need a real implementation.
+    testImplementation(libs.org.json)
 }
 
 // The app must never declare a permission. Fail the build if any dependency merges one in.
