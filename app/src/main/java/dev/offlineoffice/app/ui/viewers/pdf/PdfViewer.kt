@@ -113,9 +113,6 @@ fun PdfViewer(session: PdfSession) {
         if (session.formType == FormType.XFA_FULL) {
             Notice("This form uses XFA, which is not supported. Only its static content is shown and it cannot be filled.")
         }
-        state.tool?.let { tool ->
-            Notice(tool.hint, action = "Cancel") { state.tool = null }
-        }
         if (state.searchOpen) SearchBar(state)
 
         val density = LocalDensity.current
@@ -147,6 +144,12 @@ fun PdfViewer(session: PdfSession) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     items(session.pageSizes.size) { index -> PdfPageItem(state, index) }
+                }
+            }
+            // Floats over the pages so the layout (and the tap target) does not shift when it goes.
+            state.tool?.let { tool ->
+                Box(Modifier.align(Alignment.TopCenter).padding(8.dp)) {
+                    Notice(tool.hint, action = "Cancel") { state.tool = null }
                 }
             }
             Surface(
