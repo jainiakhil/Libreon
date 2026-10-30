@@ -4,6 +4,7 @@ package dev.offlineoffice.pdf
 import android.graphics.Bitmap
 import android.os.ParcelFileDescriptor
 import java.io.Closeable
+import java.io.File
 
 /** Page size in PDF points (1/72 inch). */
 data class PageSize(val width: Float, val height: Float)
@@ -21,11 +22,14 @@ class PdfOpenException(val errorCode: Int) : Exception("PDFium error $errorCode"
 }
 
 /**
- * An open PDF. Not thread-safe: confine each instance to a single worker thread.
+ * An open PDF with its interactive form environment. Not thread-safe: confine each instance
+ * to a single worker thread. Rectangles and points are display points (see [PageRect]).
  */
 class PdfDocument private constructor(private var handle: Long) : Closeable {
 
     val pageCount: Int = PdfiumNative.pageCount(handle)
+
+    val formType: FormType = FormType.entries.getOrElse(PdfiumNative.formType(handle)) { FormType.NONE }
 
     fun pageSize(index: Int): PageSize {
         val out = FloatArray(2)
@@ -47,6 +51,52 @@ class PdfDocument private constructor(private var handle: Long) : Closeable {
         drawAnnotations: Boolean = true,
     ) {
         PdfiumNative.renderPage(checkOpen(), index, bitmap, left, top, width, height, drawAnnotations)
+    }
+
+    /** The fillable widgets on page [index] with their current values. */
+    fun formFields(index: Int): List<FormField> = FormField.parse(index, PdfiumNative.pageFields(checkOpen(), index))
+
+    fun setText(field: FormField, text: String): Boolean =
+        PdfiumNative.setFieldText(checkOpen(), field.page, field.annotIndex, text)
+
+    fun selectOption(field: FormField, option: Int, selected: Boolean = true): Boolean =
+        PdfiumNative.setFieldChoice(checkOpen(), field.page, field.annotIndex, option, selected)
+
+    /** Toggles a check box or selects a radio button, as a click would. */
+    fun click(field: FormField): Boolean = PdfiumNative.clickField(checkOpen(), field.page, field.annotIndex)
+
+    fun search(index: Int, query: String, matchCase: Boolean = false, wholeWord: Boolean = false): List<SearchMatch> {
+        val raw = PdfiumNative.search(checkOpen(), index, query, matchCase, wholeWord)
+        val matches = ArrayList<SearchMatch>(raw[0].toInt())
+        var p = 1
+        repeat(raw[0].toInt()) {
+            val count = raw[p++].toInt()
+            val rects = List(count) { PageRect(raw[p + it * 4], raw[p + it * 4 + 1], raw[p + it * 4 + 2], raw[p + it * 4 + 3]) }
+            p += count * 4
+            matches += SearchMatch(index, rects)
+        }
+        return matches
+    }
+
+    /** Places [bitmap] in [rect]: into the page content, or as a /Stamp annotation. */
+    fun insertImage(index: Int, bitmap: Bitmap, rect: PageRect, asAnnotation: Boolean): Boolean =
+        PdfiumNative.insertImage(checkOpen(), index, bitmap, rect.left, rect.top, rect.right, rect.bottom, asAnnotation)
+
+    /** Writes Helvetica text into the page content, starting at ([x], [baseline]). */
+    fun insertText(index: Int, text: String, x: Float, baseline: Float, fontSize: Float, argb: Int): Boolean =
+        PdfiumNative.insertText(checkOpen(), index, text, x, baseline, fontSize, argb)
+
+    /** Strokes polylines into the page content; a NaN pair in [points] starts a new line. */
+    fun insertPath(index: Int, points: FloatArray, strokeWidth: Float, argb: Int): Boolean =
+        PdfiumNative.insertPath(checkOpen(), index, points, strokeWidth, argb)
+
+    /** Writes a copy to [target]. Incremental saves keep the original bytes as a prefix. */
+    fun saveTo(target: File, incremental: Boolean) {
+        val mode = ParcelFileDescriptor.MODE_WRITE_ONLY or ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_TRUNCATE
+        ParcelFileDescriptor.open(target, mode).use { pfd ->
+            check(PdfiumNative.save(checkOpen(), pfd.fd, incremental)) { "PDFium could not save the document" }
+            pfd.fileDescriptor.sync()
+        }
     }
 
     override fun close() {
