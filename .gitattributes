@@ -5,3 +5,8 @@
 *.png binary
 # Line-ending test fixture: must keep its CRLF bytes exactly.
 testdata/crlf-utf8.txt -text
+testdata/utf16le-bom.txt -text
+testdata/utf8-bom.txt -text
+testdata/latin1.txt -text
+testdata/cr-only.txt -text
+testdata/quoted.csv -text

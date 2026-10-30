@@ -1,0 +1,7 @@
+id,name,notes,amount
+1,"Smith, John","He said ""hello""",12.50
+2,Jane,"Line one
+line two
+line three",7
+3,"",empty name,0
+4,"Ünïcödé","tab	here",-3

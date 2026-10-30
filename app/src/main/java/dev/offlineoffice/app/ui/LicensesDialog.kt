@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 private val notices = listOf(
     "PDFium" to "BSD-3-Clause / Apache-2.0 (incl. FreeType FTL, libjpeg-turbo, OpenJPEG BSD-2, lcms2 MIT, zlib)",
     "pdfium-binaries packaging" to "MIT",
+    "commonmark-java 0.24.0 (core, GFM tables, strikethrough, task list items)" to "BSD-2-Clause",
     "Kotlin, kotlinx.coroutines" to "Apache-2.0",
     "AndroidX (Compose, Material 3, Activity, Lifecycle, Room)" to "Apache-2.0",
 )
