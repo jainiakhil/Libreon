@@ -17,6 +17,10 @@ android {
         versionName = "0.1.0-m0"
     }
     buildTypes {
+        debug {
+            // Lets parallel work install side by side on one device: ./gradlew -PidSuffix=.pdf ...
+            providers.gradleProperty("idSuffix").orNull?.let { applicationIdSuffix = it }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
