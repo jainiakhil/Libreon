@@ -34,6 +34,9 @@ cd "$WORK"
 # Later options override the distro config:
 #  - no PDF import / PDFium: we render PDFs with our own PDFium, and two copies would clash
 #  - en-US only for now (more UI languages later, each adds size)
+#  - size: drop features the app does not offer (Base/database, macros, Java, media,
+#    solver, barcodes, galleries/templates, bundled dictionaries) and build with LTO + -Os.
+#    The first engine build without these was 204 MB stripped (x86_64).
 cat > autogen.input <<EOF
 --with-android-ndk=$SDK/ndk/$NDK_VERSION
 --with-android-sdk=$SDK
@@ -41,6 +44,18 @@ cat > autogen.input <<EOF
 --disable-pdfimport
 --disable-pdfium
 --with-lang=en-US
+--disable-database-connectivity
+--disable-scripting
+--without-java
+--disable-avmedia
+--disable-coinmp
+--disable-zxing
+--without-galleries
+--without-templates
+--without-myspell-dicts
+--enable-lto
+--with-extra-cc-flags=-Os
+--with-extra-cxx-flags=-Os
 --with-parallelism=$(nproc)
 EOF
 

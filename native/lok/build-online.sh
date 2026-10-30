@@ -20,14 +20,19 @@ export ANDROID_HOME=/opt/android-sdk
 if [ ! -d "$WORK" ]; then
   rsync -a --exclude .git --exclude /engine "$SRC/" "$WORK/"
 fi
+# The browser build reads engine sources (e.g. Accelerators.xcu for keyboard shortcuts)
+# from ./engine, so point it at this ABI's engine tree.
+ln -sfn "$ENGINE" "$WORK/engine"
 cd "$WORK"
 
-./autogen.sh
-# --disable-branding: no Collabora trademarks in anything we build.
-./configure --enable-androidapp \
-            --with-lo-builddir="$ENGINE" \
-            --with-android-abi="$ABI" \
-            --disable-branding
+if [ ! -f config.status ]; then
+  ./autogen.sh
+  # --disable-branding: no Collabora trademarks in anything we build.
+  ./configure --enable-androidapp \
+              --with-lo-builddir="$ENGINE" \
+              --with-android-abi="$ABI" \
+              --disable-branding
+fi
 make -j"$(nproc)"
 
 cd android
