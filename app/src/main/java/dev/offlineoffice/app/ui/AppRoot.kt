@@ -44,10 +44,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.offlineoffice.app.data.TabEntity
+import dev.offlineoffice.app.session.SaveAdvice
 import dev.offlineoffice.app.tabs.SaveResult
 import dev.offlineoffice.app.tabs.SessionState
 import dev.offlineoffice.app.tabs.TabManager
 import dev.offlineoffice.app.ui.viewers.DocumentHost
+import dev.offlineoffice.app.ui.viewers.pdf.SaveAsNewDialog
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -69,6 +71,7 @@ fun AppRoot(
     var showLicenses by remember { mutableStateOf(false) }
     var confirmClose by remember { mutableStateOf<TabEntity?>(null) }
     var conflictTab by remember { mutableStateOf<TabEntity?>(null) }
+    var saveAsNewTab by remember { mutableStateOf<TabEntity?>(null) }
 
     val active = tabList.firstOrNull { it.id == activeId }?.takeUnless { showHome }
 
@@ -84,7 +87,12 @@ fun AppRoot(
         is SaveResult.Failed -> onMessage("Save failed: ${result.message}")
     }
 
-    fun save(tab: TabEntity) = scope.launch { handleSave(tab, tabs.save(tab.id)) }
+    fun saveAdvice(tab: TabEntity) = ((sessions[tab.id] as? SessionState.Ready)?.session as? SaveAdvice)
+        ?.takeIf { it.prefersSaveAsNew }
+
+    fun save(tab: TabEntity) {
+        if (saveAdvice(tab) != null) saveAsNewTab = tab else scope.launch { handleSave(tab, tabs.save(tab.id)) }
+    }
 
     fun requestClose(tab: TabEntity) {
         if (tab.dirty) confirmClose = tab else tabs.close(tab.id)
@@ -182,9 +190,13 @@ fun AppRoot(
             confirmButton = {
                 TextButton(onClick = {
                     confirmClose = null
-                    scope.launch {
-                        val result = tabs.save(tab.id)
-                        if (result == SaveResult.Saved) tabs.close(tab.id) else handleSave(tab, result)
+                    if (saveAdvice(tab) != null) {
+                        saveAsNewTab = tab
+                    } else {
+                        scope.launch {
+                            val result = tabs.save(tab.id)
+                            if (result == SaveResult.Saved) tabs.close(tab.id) else handleSave(tab, result)
+                        }
                     }
                 }) { Text("Save") }
             },
@@ -210,6 +222,16 @@ fun AppRoot(
             dismissButton = {
                 TextButton(onClick = { conflictTab = null; onSaveAs(tab.id, tab.displayName) }) { Text("Save as copy") }
             },
+        )
+    }
+    saveAsNewTab?.let { tab ->
+        val suggested = saveAdvice(tab)?.suggestedSaveName(tab.displayName) ?: tab.displayName
+        SaveAsNewDialog(
+            displayName = tab.displayName,
+            suggestedName = suggested,
+            onSaveAsNew = { saveAsNewTab = null; onSaveAs(tab.id, suggested) },
+            onOverwrite = { saveAsNewTab = null; scope.launch { handleSave(tab, tabs.save(tab.id)) } },
+            onDismiss = { saveAsNewTab = null },
         )
     }
     if (showLicenses) LicensesDialog(onDismiss = { showLicenses = false })

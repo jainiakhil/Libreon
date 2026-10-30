@@ -68,6 +68,8 @@ dependencies {
     implementation(libs.commonmark.ext.gfm.strikethrough)
     implementation(libs.commonmark.ext.task.list.items)
     testImplementation(libs.junit)
+    // The platform org.json is a stub on the JVM; tests need a real implementation.
+    testImplementation(libs.org.json)
 }
 
 // The app must never declare a permission. Fail the build if any dependency merges one in.
