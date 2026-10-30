@@ -1,0 +1,7 @@
+# Keep LF everywhere (shell scripts run inside WSL), CRLF only for Windows batch files.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.jar binary
+*.png binary
+# Line-ending test fixture: must keep its CRLF bytes exactly.
+testdata/crlf-utf8.txt -text
