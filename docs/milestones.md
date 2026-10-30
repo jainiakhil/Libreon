@@ -47,3 +47,7 @@ Known limitation: the same file opened through two different providers gives two
   - no undo for form or mark edits
   - flattened text is Latin-only (Helvetica)
   - photo import untested on a device
+- Cross-model review (Gemini 3.8 Flash) of `pdf_jni.cpp`, findings checked against the code:
+  - **Fixed:** a page-cache teardown that could hand a freed page to form callbacks; an unchecked bitmap wrap in `renderPage`; unchecked JNI allocations (`NewFloatArray`, `GetStringChars`); an ignored second-read result in `ReadWide`.
+  - **Rejected:** the `pageSize` array-length "issue" (the internal caller always passes a size-2 array).
+  - **Known risk:** form callbacks that load more than 4 other pages could evict the caller's cached page. Unlikely; revisit if form-heavy PDFs misbehave.

@@ -35,8 +35,9 @@ cd "$WORK"
 #  - no PDF import / PDFium: we render PDFs with our own PDFium, and two copies would clash
 #  - en-US only for now (more UI languages later, each adds size)
 #  - size: drop features the app does not offer (Base/database, macros, Java, media,
-#    solver, barcodes, galleries/templates, bundled dictionaries) and build with LTO + -Os.
+#    solver, barcodes, galleries/templates, bundled dictionaries) and build with -Os.
 #    The first engine build without these was 204 MB stripped (x86_64).
+#    Not --enable-lto: for Android it adds GCC's -fuse-linker-plugin, which NDK clang rejects.
 cat > autogen.input <<EOF
 --with-android-ndk=$SDK/ndk/$NDK_VERSION
 --with-android-sdk=$SDK
@@ -53,7 +54,6 @@ cat > autogen.input <<EOF
 --without-galleries
 --without-templates
 --without-myspell-dicts
---enable-lto
 --with-extra-cc-flags=-Os
 --with-extra-cxx-flags=-Os
 --with-parallelism=$(nproc)

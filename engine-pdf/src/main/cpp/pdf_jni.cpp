@@ -117,8 +117,13 @@ void EvictPage(Document* d, int index) {
 }
 
 void CloseAllPages(Document* d) {
-    for (auto& entry : d->pages) ClosePage(d, entry.second);
-    d->pages.clear();
+    // Unlink each page before closing it: FORM_OnBeforeClosePage may call back into
+    // OnGetCurrentPage/OnGetPage, which must never see (or iterate over) a closed page.
+    while (!d->pages.empty()) {
+        FPDF_PAGE page = d->pages.front().second;
+        d->pages.pop_front();
+        ClosePage(d, page);
+    }
 }
 
 // --- form-fill callbacks: we re-render from Kotlin after each edit, so most are no-ops ---
@@ -272,12 +277,13 @@ std::u16string ReadWide(Getter getter) {
     const unsigned long bytes = getter(nullptr, 0);
     if (bytes <= 2) return {};
     std::vector<FPDF_WCHAR> buf(bytes / 2);
-    getter(buf.data(), bytes);
+    if (getter(buf.data(), bytes) == 0) return {};
     return std::u16string(reinterpret_cast<const char16_t*>(buf.data()), buf.size() - 1);
 }
 
 std::u16string JavaToWide(JNIEnv* env, jstring s) {
     const jchar* chars = env->GetStringChars(s, nullptr);
+    if (chars == nullptr) return {};  // OutOfMemoryError is pending
     std::u16string out(reinterpret_cast<const char16_t*>(chars), env->GetStringLength(s));
     env->ReleaseStringChars(s, chars);
     return out;  // FPDF_WIDESTRING wants a NUL-terminated buffer: use .c_str()
@@ -456,6 +462,11 @@ Java_dev_offlineoffice_pdf_PdfiumNative_renderPage(JNIEnv* env, jclass, jlong ha
     FPDF_BITMAP target = FPDFBitmap_CreateEx(static_cast<int>(info.width),
                                              static_cast<int>(info.height), FPDFBitmap_BGRA,
                                              pixels, static_cast<int>(info.stride));
+    if (target == nullptr) {
+        AndroidBitmap_unlockPixels(env, bitmap);
+        ThrowIllegalState(env, "cannot wrap bitmap for rendering");
+        return;
+    }
     FPDFBitmap_FillRect(target, 0, 0, static_cast<int>(info.width),
                         static_cast<int>(info.height), 0xFFFFFFFF);
     // Android bitmaps are RGBA in memory; ask PDFium to emit that order directly.
@@ -628,6 +639,7 @@ Java_dev_offlineoffice_pdf_PdfiumNative_search(JNIEnv* env, jclass, jlong handle
         FPDFText_ClosePage(text);
     }
     jfloatArray result = env->NewFloatArray(static_cast<jsize>(out.size()));
+    if (result == nullptr) return nullptr;  // OutOfMemoryError is pending
     env->SetFloatArrayRegion(result, 0, static_cast<jsize>(out.size()), out.data());
     return result;
 }
