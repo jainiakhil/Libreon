@@ -17,3 +17,6 @@ captures/
 /third_party/lok/
 *.apk
 *.aab
+
+# Agent worktrees and local Claude Code state
+/.claude/
