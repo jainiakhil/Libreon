@@ -127,7 +127,7 @@ Re-evaluate `androidx.pdf` at 1.0 stable. It could replace our renderer later, b
 - **Editor**: Compose `BasicTextField` with the state-based `TextFieldState` API, which has built-in undo and redo and copes better with large text than the value/onValueChange API.
   - Monospace toggle, word wrap toggle, find and replace, go to line, character and line count.
 - **Large files**: up to 2 MB open editable. Between 2 and 50 MB open **read-only** in a virtualised line list (`LazyColumn` over a line index built by streaming). Above 50 MB we show a warning and offer read-only head and tail.
-- **Encoding**: detect with the platform's ICU `CharsetDetector` (BOM first). Remember the encoding, BOM and line-ending style per tab, and write them back the same way, so no unintended conversions happen.
+- **Encoding**: BOM first, then strict UTF-8, then a small built-in heuristic (UTF-16 without BOM, East Asian multibyte, windows-1252, ISO-8859-1). ICU's `CharsetDetector` is not part of the public Android SDK, so it cannot be used. Remember the encoding, BOM and line-ending style per tab, and write them back the same way, so no unintended conversions happen.
 - **Markdown preview**: a split, toggle or swipe between Edit and Preview. Rendering is `commonmark-java` + GFM tables, strikethrough and task-list extensions → HTML, shown in a WebView with **JavaScript disabled, file and content access disabled, and all network loads blocked**. Light and dark CSS is our own.
 - **CSV**: a "Table view" toggle (our own RFC 4180 parser) as a read-only grid. Editing happens in text mode. An *Open as spreadsheet* action hands the file to the Office engine.
 - **JSON**: a *Format* action (pretty-print and validate, using `org.json` from the platform).

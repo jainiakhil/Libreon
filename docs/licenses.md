@@ -4,14 +4,14 @@
 
 ## Shipped in the app
 
-In the build today: PDFium, Kotlin/kotlinx.coroutines, AndroidX. The LibreOfficeKit rows arrive with milestone M4; commonmark-java with M2.
+In the build today: PDFium, commonmark-java, Kotlin/kotlinx.coroutines, AndroidX. The LibreOfficeKit rows arrive with milestone M4.
 
 | Library | Use | License | Notes |
 |---|---|---|---|
 | LibreOffice core (via LibreOfficeKit) | docx/xlsx/pptx engine | MPL-2.0 (some files dual MPL-2.0 / LGPL-3.0+) | Bundled externals each carry their own license (e.g. ICU: Unicode, Boost: BSL-1.0, libxml2: MIT, HarfBuzz: MIT, cairo: MPL-1.1/LGPL-2.1, NSS: MPL-2.0); the full list is generated from the LOK build in M0 |
 | Collabora Online browser front-end | Office editing UI in a local WebView | MPL-2.0 | Only local assets; online-only features stripped |
 | PDFium (via bblanchon/pdfium-binaries) | PDF render, forms, save | BSD-3-Clause / Apache-2.0 | Includes FreeType (FTL), libjpeg-turbo (IJG/BSD), OpenJPEG (BSD-2), lcms2 (MIT), zlib (zlib); binaries packaging is MIT |
-| commonmark-java (+ GFM extensions) | Markdown → HTML | BSD-2-Clause | |
+| commonmark-java 0.24.0 (`commonmark`, `commonmark-ext-gfm-tables`, `commonmark-ext-gfm-strikethrough`, `commonmark-ext-task-list-items`) | Markdown → HTML for the preview | BSD-2-Clause | Pure Java, no transitive dependencies |
 | Kotlin stdlib, kotlinx.coroutines | Language/runtime | Apache-2.0 | |
 | AndroidX (Compose, Material 3, Activity, Lifecycle, Room, DataStore, WebKit) | UI and persistence | Apache-2.0 | |
 
@@ -30,6 +30,12 @@ In the build today: PDFium, Kotlin/kotlinx.coroutines, AndroidX. The LibreOffice
 | MuPDF | AGPL-3.0 (or commercial) |
 | ONLYOFFICE editors | AGPL-3.0, pending your answer to open question 3 |
 | sora-editor | LGPL-2.1; not needed for our text scope |
+
+## Test-only (not shipped)
+
+| Library | Use | License |
+|---|---|---|
+| JUnit 4.13.2 (+ Hamcrest 1.3) | JVM unit tests | EPL-1.0 (Hamcrest: BSD-3-Clause) |
 
 ## Analysis tooling (not shipped)
 
