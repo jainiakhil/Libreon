@@ -1,0 +1,19 @@
+# Reference APKs are third-party, copyrighted binaries: never commit them.
+/reference-apks/
+# Personal test documents.
+/test-docs/
+# Build outputs
+.gradle/
+build/
+/local.properties
+.idea/
+*.iml
+.cxx/
+.externalNativeBuild/
+captures/
+# Prebuilt native engines are fetched/built by scripts, not committed.
+/app/src/main/jniLibs/
+/third_party/pdfium/
+/third_party/lok/
+*.apk
+*.aab
