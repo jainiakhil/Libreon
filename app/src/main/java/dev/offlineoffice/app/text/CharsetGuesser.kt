@@ -19,8 +19,10 @@ object CharsetGuesser {
         val out = ArrayList<String>()
         utf16(sample)?.let(out::add)
         out += cjk(sample)
-        out += "windows-1252"
-        out += "ISO-8859-1"
+        // windows-1252 only differs from ISO-8859-1 in 0x80–0x9F (curly quotes, €, …): prefer it only
+        // when those bytes occur, so a Latin-1 file keeps its name and rejects characters it cannot hold.
+        val usesC1 = sample.any { (it.toInt() and 0xFF) in 0x80..0x9F }
+        out += if (usesC1) listOf("windows-1252", "ISO-8859-1") else listOf("ISO-8859-1", "windows-1252")
         return out
     }
 

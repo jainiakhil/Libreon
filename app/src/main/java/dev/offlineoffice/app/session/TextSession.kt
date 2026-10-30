@@ -2,10 +2,12 @@
 package dev.offlineoffice.app.session
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.text.input.TextFieldBuffer
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -268,10 +270,50 @@ class TextSession(override val tabId: String, override val kind: DocumentKind) :
         format = newFormat
     }
 
-    /** Replaces the whole text as one undoable edit (used by JSON Format). */
-    fun replaceAll(text: String) {
-        state.edit { replace(0, length, text) }
+    /** Replaces the whole text as one undoable step (JSON Format, Replace all). */
+    fun replaceAll(text: String) = programmaticEdit { replace(0, length, text) }
+
+    /** Replaces [start, end) and puts the cursor after it, as one undoable step (Replace). */
+    fun replaceRange(start: Int, end: Int, text: String) = programmaticEdit {
+        replace(start, end, text)
+        selection = TextRange(start + text.length)
     }
+
+    // TextFieldState.edit {} clears the field's undo history, so programmatic edits keep a small
+    // stack of the previous texts. Undo walks the field's own history (typing since the last
+    // programmatic edit) first, then this stack.
+    private val programmaticUndo = ArrayDeque<String>()
+    private var programmaticUndoSize by mutableIntStateOf(0)
+
+    private fun programmaticEdit(block: TextFieldBuffer.() -> Unit) {
+        programmaticUndo.addLast(state.text.toString())
+        while (programmaticUndo.size > MAX_PROGRAMMATIC_UNDO) programmaticUndo.removeFirst()
+        programmaticUndoSize = programmaticUndo.size
+        state.edit(block)
+    }
+
+    @OptIn(ExperimentalFoundationApi::class)
+    val canUndo: Boolean get() = state.undoState.canUndo || programmaticUndoSize > 0
+
+    @OptIn(ExperimentalFoundationApi::class)
+    val canRedo: Boolean get() = state.undoState.canRedo
+
+    @OptIn(ExperimentalFoundationApi::class)
+    fun undo() {
+        if (state.undoState.canUndo) {
+            state.undoState.undo()
+            return
+        }
+        val previous = programmaticUndo.removeLastOrNull() ?: return
+        programmaticUndoSize = programmaticUndo.size
+        state.edit {
+            replace(0, length, previous)
+            selection = TextRange(0)
+        }
+    }
+
+    @OptIn(ExperimentalFoundationApi::class)
+    fun redo() = state.undoState.redo()
 
     override fun captureViewState(): String = JSONObject()
         .put("selStart", state.selection.start)
@@ -314,5 +356,6 @@ class TextSession(override val tabId: String, override val kind: DocumentKind) :
         const val SAMPLE_BYTES = 64 * 1024
         const val WINDOW_BYTES = 4L * 1024 * 1024
         const val CACHED_BLOCKS = 48
+        const val MAX_PROGRAMMATIC_UNDO = 5
     }
 }

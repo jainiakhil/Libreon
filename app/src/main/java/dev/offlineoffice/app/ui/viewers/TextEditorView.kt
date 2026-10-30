@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -184,10 +185,7 @@ fun TextEditorView(session: TextSession) {
         val end = start + find.query.length
         val text = session.state.text
         if (end > text.length || !text.substring(start, end).equals(find.query, ignoreCase = !find.matchCase)) return
-        session.state.edit {
-            replace(start, end, find.replacement)
-            selection = TextRange(start + find.replacement.length)
-        }
+        session.replaceRange(start, end, find.replacement)
         // Recompute now so "Replace" can be pressed repeatedly, then move to the next match.
         val found = findAll(session.state.text.toString(), find.query, !find.matchCase)
         find.matches = found
@@ -250,7 +248,7 @@ fun TextEditorView(session: TextSession) {
                 )
             }
             HorizontalDivider()
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
                 when {
                     mode is Mode.Huge -> HugeFileChooser(
                         mode.sizeBytes,
@@ -317,7 +315,6 @@ fun TextEditorView(session: TextSession) {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class) // TextFieldState.undoState
 @Composable
 private fun Toolbar(
     session: TextSession,
@@ -332,9 +329,8 @@ private fun Toolbar(
     val mode = session.mode
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         if (editable) {
-            val undo = session.state.undoState
-            IconButton(onClick = { undo.undo() }, enabled = undo.canUndo) { Icon(Icons.AutoMirrored.Outlined.Undo, "Undo") }
-            IconButton(onClick = { undo.redo() }, enabled = undo.canRedo) { Icon(Icons.AutoMirrored.Outlined.Redo, "Redo") }
+            IconButton(onClick = session::undo, enabled = session.canUndo) { Icon(Icons.AutoMirrored.Outlined.Undo, "Undo") }
+            IconButton(onClick = session::redo, enabled = session.canRedo) { Icon(Icons.AutoMirrored.Outlined.Redo, "Redo") }
         }
         if (mode !is Mode.Huge) {
             IconButton(onClick = onFind, enabled = pane == Pane.TEXT || pane == Pane.SPLIT || !editable) {

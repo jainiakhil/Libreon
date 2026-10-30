@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
@@ -25,7 +26,8 @@ import kotlinx.coroutines.withContext
 
 /**
  * Renders Markdown in a locked-down WebView: no JavaScript, no file or content access, network
- * loads blocked, and every resource request answered with an empty 403 so nothing is ever fetched.
+ * loads blocked, and every request other than the page itself (a data: URL) answered with an empty
+ * 403, so nothing is ever fetched (the page's CSP forbids loads as well).
  * Link taps never navigate; they are handed to [onLink] (which offers to copy the URL).
  */
 @Composable
@@ -47,7 +49,7 @@ fun MarkdownPreview(markdown: String, onLink: (String) -> Unit, modifier: Modifi
     val linkHandler by rememberUpdatedState(onLink)
     val background = scheme.surface.toArgb()
     AndroidView(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().clipToBounds(),
         factory = { context -> lockedDownWebView(context) { linkHandler(it) } },
         update = { view ->
             view.setBackgroundColor(background)
@@ -79,8 +81,11 @@ private fun lockedDownWebView(context: android.content.Context, onLink: (String)
         displayZoomControls = false
     }
     webViewClient = object : WebViewClient() {
-        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse =
-            WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+            // Our own page arrives as a main-frame data: URL (no network involved); block everything else.
+            if (request.isForMainFrame && request.url.scheme == "data") return null
+            return WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+        }
 
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             onLink(request.url.toString())

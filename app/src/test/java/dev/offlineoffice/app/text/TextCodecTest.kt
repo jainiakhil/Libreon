@@ -121,7 +121,10 @@ class TextCodecTest {
 
     @Test fun guesserHandlesLatinUtf16AndCjk() {
         val latin = TextCodec.decode(fixture("latin1.txt"), detector = CharsetGuesser::candidates)
-        assertTrue(latin.format.charset == "windows-1252" || latin.format.charset == "ISO-8859-1")
+        assertEquals("ISO-8859-1", latin.format.charset) // no 0x80–0x9F bytes, so not windows-1252
+        val cp1252 = TextCodec.decode("“quoted” – 5 €\n".toByteArray(charset("windows-1252")), detector = CharsetGuesser::candidates)
+        assertEquals("windows-1252", cp1252.format.charset)
+        assertEquals("“quoted” – 5 €\n", cp1252.text)
         assertTrue(latin.text.contains("déjà vu"))
         val utf16 = "plain text without a BOM\nsecond line\n".toByteArray(Charsets.UTF_16LE)
         assertEquals("UTF-16LE", TextCodec.decode(utf16, detector = CharsetGuesser::candidates).format.charset)
