@@ -36,6 +36,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // The activity may be recreated (e.g. a window resize) while the save picker is open.
+        pendingSaveAs = savedInstanceState?.getString(KEY_PENDING_SAVE_AS)
         setContent {
             AppTheme {
                 AppRoot(
@@ -52,6 +54,11 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pendingSaveAs?.let { outState.putString(KEY_PENDING_SAVE_AS, it) }
     }
 
     override fun onStop() {
@@ -91,5 +98,9 @@ class MainActivity : ComponentActivity() {
             else -> return
         }
         Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
+    }
+
+    private companion object {
+        const val KEY_PENDING_SAVE_AS = "pendingSaveAs"
     }
 }
