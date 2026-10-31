@@ -43,8 +43,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.offlineoffice.app.R
 import dev.offlineoffice.app.data.TabEntity
 import dev.offlineoffice.app.session.DocumentTools
 import dev.offlineoffice.app.session.SaveAdvice
@@ -113,7 +115,7 @@ fun AppRoot(
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                active?.displayName ?: "Offline Office",
+                                active?.displayName ?: stringResource(R.string.app_name),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false),

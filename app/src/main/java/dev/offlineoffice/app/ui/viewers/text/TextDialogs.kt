@@ -120,7 +120,7 @@ fun LinkDialog(url: String, onDismiss: () -> Unit) {
         title = { Text("Link") },
         text = {
             Column {
-                Text("Offline Office does not open links.", style = MaterialTheme.typography.bodyMedium)
+                Text("Libreon does not open links.", style = MaterialTheme.typography.bodyMedium)
                 Text(url, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall)
             }
         },

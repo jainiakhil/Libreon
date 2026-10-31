@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Offline Office</string>
+    <string name="app_name">Libreon</string>
+    <string name="app_tagline">Work freely</string>
 </resources>

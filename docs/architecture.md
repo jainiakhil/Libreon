@@ -2,7 +2,7 @@
 
 **Status: APPROVED 2026-10-31**, with the decisions recorded in §9. Build has started at M0.
 
-Working name: **Offline Office** (placeholder). Kotlin + Jetpack Compose, single-activity, fully offline, zero runtime permissions. Evidence for the reference behaviour cited here is in [findings.md](findings.md).
+Name: **Libreon** ("Work freely"); "Offline Office" was the working name. Kotlin + Jetpack Compose, single-activity, fully offline, zero runtime permissions. Evidence for the reference behaviour cited here is in [findings.md](findings.md).
 
 ## 0. Summary of decisions
 

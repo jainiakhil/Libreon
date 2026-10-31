@@ -12,11 +12,11 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "dev.offlineoffice.app"
+        applicationId = "dev.libreon.app"
         minSdk = 31
         targetSdk = 36
         versionCode = 1
-        versionName = "0.9.0"
+        versionName = "0.9.0-beta.1"
     }
     // The release key lives outside version control (signing/, git-ignored). Without it,
     // release builds fall back to the debug key, which is fine for local testing only.

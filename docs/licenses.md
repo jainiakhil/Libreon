@@ -1,6 +1,6 @@
 # Third-party libraries and licenses
 
-**Offline Office itself is licensed GPL-3.0-or-later** (see [LICENSE](../LICENSE)). The tables below list every third-party component and are kept in sync with the actual Gradle and native dependencies. Every entry here must also appear on the in-app "Open-source licenses" screen.
+**Libreon itself is licensed GPL-3.0-or-later** (see [LICENSE](../LICENSE)). The tables below list every third-party component and are kept in sync with the actual Gradle and native dependencies. Every entry here must also appear on the in-app "Open-source licenses" screen.
 
 ## Shipped in the app
 

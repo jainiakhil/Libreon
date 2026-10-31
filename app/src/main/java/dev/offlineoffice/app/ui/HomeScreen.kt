@@ -40,10 +40,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.offlineoffice.app.R
 import dev.offlineoffice.app.tabs.OpenOrigin
 import dev.offlineoffice.app.tabs.TabManager
 import kotlinx.coroutines.launch
@@ -79,6 +81,15 @@ fun HomeScreen(tabs: TabManager, onOpen: () -> Unit, onSelectTab: (String) -> Un
     val hasMatches = filteredOpen.isNotEmpty() || filteredRecents.isNotEmpty() || filteredClosed.isNotEmpty()
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+        item {
+            Text(
+                stringResource(R.string.app_tagline),
+                Modifier.fillMaxWidth().padding(top = 12.dp),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center,
+            )
+        }
         item {
             Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) {
                 Button(onClick = onOpen) {

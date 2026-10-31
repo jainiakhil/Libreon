@@ -35,7 +35,7 @@ fun LicensesDialog(onDismiss: () -> Unit) {
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(
-                    "Offline Office is free software, licensed under the GNU General Public License v3.0 or later. " +
+                    "Libreon is free software, licensed under the GNU General Public License v3.0 or later. " +
                         "It has no network access, no accounts and no analytics.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
