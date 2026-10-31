@@ -295,13 +295,18 @@ Collabora's Android glue (`android/lib`, MPL-2.0) was studied: a digest from Gem
 
   ICU locale data is 33 MB of prebuilt `icudt78l.dat`. It can be trimmed later with `icupkg` (dropping whole categories), but only with tests for sorting and line-breaking.
 
-### 10.1 Hosting the engine (open decision)
+### 10.1 Hosting the engine (decided 2026-10-31: option 2)
 
-Built and verified so far (branch `m4-office`): the `:engine-office` module (our bridge classes, the fake-socket server, engine start-up and asset unpacking, the save protocol) and an `OfficeSession` that shows the document in a tab. A docx and the 52-control CV template open and render inside the app. Closing or switching to another Office document ends the process, as described above.
+Options considered:
+1. **Separate `:office` process with its own Activity**, as upstream does. Proven, but the Office screen would draw its own header instead of the shared tab bar.
+2. **Separate `:office` process rendered into the main window** with `SurfaceControlViewHost`. The tab bar stays unchanged. **Chosen**, after a prototype showed touch, focus, the hardware keyboard and the on-screen keyboard all work.
+3. **Port the Android glue to the shared main loop** (`DOCS_SHARE_PROCESS`). No restarts and room for several open documents; a substantial patch to Collabora's native code. Possible future update.
 
-Options:
-1. **Separate `:office` process with its own Activity**, as upstream does. Proven; the process is restarted for each Office document (a few seconds per Office-to-Office switch); the Office screen draws its own header instead of the shared tab bar.
-2. **Separate `:office` process rendered into the main window** with `SurfaceControlViewHost` (API 30+). The tab bar stays unchanged; same restart cost; keyboard and focus handling for embedded windows need a prototype first.
-3. **Port the Android glue to the shared main loop** (`DOCS_SHARE_PROCESS`). No restarts and room for several open documents later; a substantial native change to Collabora's code, carried as our own patch.
-
-In every option a dirty Office tab is checkpointed (recovery copy) before its process ends, so switching never loses edits.
+How it works:
+- `OfficeService` (in `:engine-office`, `android:process=":office"`) hosts the engine and one `OfficeDocument`: the bridge, the fake socket and the front-end WebView. The page is drawn through a `SurfaceControlViewHost` whose `SurfacePackage` goes to the app.
+- `OfficeClient` (app process) binds the service, exchanges `Messenger` messages (open, attach, resize, detach, save; state, modified, save-requested, saved) and shows the surface in a `SurfaceView` placed above our window (`setZOrderOnTop`), so input reaches the page.
+- Each Office document gets a fresh process. Because closing a document would end the process anyway, the client never sends `BYE`: closing a tab, switching to another Office tab (after the TabManager's checkpoint) or memory pressure simply ends the process (`Process.killProcess`, same uid). Office-to-Office switches take about 2 s.
+- Switching to a PDF or text tab only detaches the surface; the engine keeps the document and the page state.
+- The app's `Application` does nothing in `:office` except give WebView its own data directory there.
+- Saving: the engine saves its working file (`save` protocol command, waits for the `.uno:Save` result), then the TabManager writes it to the original with its usual verified SAF write. An unmodified document is not saved by the engine (LibreOffice refuses); its file is already current.
+- The page's own Save button arrives as a `save …` protocol message and runs the app's save. The native `SAVE` message only reports that the engine saved and is ignored.

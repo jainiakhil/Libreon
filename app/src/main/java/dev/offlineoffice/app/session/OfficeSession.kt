@@ -4,7 +4,7 @@ package dev.offlineoffice.app.session
 import android.content.Context
 import android.content.res.Configuration
 import dev.offlineoffice.app.doc.DocumentKind
-import dev.offlineoffice.office.OfficeDocument
+import dev.offlineoffice.office.OfficeClient
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,28 +33,33 @@ class OfficeSession(
     private val _dirty = MutableStateFlow(false)
     override val dirty: StateFlow<Boolean> = _dirty.asStateFlow()
 
-    lateinit var document: OfficeDocument
+    /** The engine edits this copy in place. */
+    private lateinit var working: File
+
+    lateinit var document: OfficeClient
         private set
 
     override suspend fun load(file: File, viewState: String?) {
         val ext = file.extension.ifEmpty { kind.extensions.first() }
-        val working = File(workDir, "document.$ext")
+        working = File(workDir, "document.$ext")
         withContext(Dispatchers.IO) {
             workDir.deleteRecursively()
             workDir.mkdirs()
             file.copyTo(working)
         }
-        document = OfficeDocument(context, working)
+        document = OfficeClient(context)
         scope.launch { document.modified.collect { if (it) _dirty.value = true } }
         val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        document.open(darkTheme = dark)
+        document.open(working, darkTheme = dark)
     }
 
     override fun captureViewState(): String? = null
 
     override suspend fun writeTo(target: File) {
-        document.save()
-        withContext(Dispatchers.IO) { document.file.copyTo(target, overwrite = true) }
+        // The engine refuses to save an unmodified document; its file is then already current
+        // (as loaded, or as of the engine's last save).
+        if (document.modified.value) document.save()
+        withContext(Dispatchers.IO) { working.copyTo(target, overwrite = true) }
     }
 
     override fun markSaved() {

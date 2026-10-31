@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package dev.offlineoffice.app.ui.viewers
 
-import android.view.ViewGroup
-import android.widget.FrameLayout
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -16,9 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.offlineoffice.app.session.OfficeSession
 import dev.offlineoffice.app.ui.CenteredMessage
-import dev.offlineoffice.office.OfficeDocument
+import dev.offlineoffice.office.OfficeClient
 
-/** The engine's front-end page for an Office document. The page outlives this view. */
+/** The engine's page for an Office document, drawn by the engine process into a surface of ours. */
 @Composable
 fun OfficeView(session: OfficeSession, onSave: () -> Unit) {
     val document = session.document
@@ -29,18 +29,23 @@ fun OfficeView(session: OfficeSession, onSave: () -> Unit) {
     Box(Modifier.fillMaxSize()) {
         AndroidView(
             factory = { context ->
-                document.attachTo(context)
-                FrameLayout(context).apply {
-                    addView(document.webView, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                SurfaceView(context).apply {
+                    // Above our window, so touches (and with them focus and the keyboard) reach the page.
+                    setZOrderOnTop(true)
+                    holder.addCallback(object : SurfaceHolder.Callback {
+                        override fun surfaceCreated(holder: SurfaceHolder) = document.attach(this@apply)
+                        override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) =
+                            document.resize(this@apply, width, height)
+                        override fun surfaceDestroyed(holder: SurfaceHolder) = document.detach(this@apply)
+                    })
                 }
             },
-            onRelease = { document.detach() },
             modifier = Modifier.fillMaxSize(),
         )
         when (val s = state) {
-            OfficeDocument.State.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            is OfficeDocument.State.Failed -> CenteredMessage(s.message)
-            OfficeDocument.State.Ready -> Unit
+            OfficeClient.State.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            is OfficeClient.State.Failed -> CenteredMessage(s.message)
+            OfficeClient.State.Ready -> Unit
         }
     }
 }
