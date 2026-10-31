@@ -1,2 +1,0 @@
-8676b9e20a5ec81377e7fe0964581576353b86286b571dca7fc55f0b111a0fb5 *Libreon-0.9.0-beta.1-arm64-v8a.apk
-781b0369cfd08629388ce41eebf37db493ece62ac1089c9a3fd7a16ccbadb6d2 *Libreon-0.9.0-beta.1-x86_64.apk

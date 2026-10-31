@@ -28,3 +28,6 @@ hs_err_pid*.log
 
 # Release signing key and its passwords: keep private, back them up outside the repo.
 /signing/
+
+# Local copies of release APKs and checksums (published on GitHub Releases).
+/release/
