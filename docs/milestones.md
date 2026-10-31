@@ -82,7 +82,7 @@ The engine runs in its own `:office` process and draws into the app's tab (archi
   - Clipboard is internal to the document only.
   - On the phone the page zooms in after entering edit mode.
   - The first open after install unpacks engine files (about 2.7 s on the emulator).
-  - arm64 has no engine build yet: arm64 APKs contain the assets but no engine library.
+  - ~~arm64 has no engine build yet~~ (built in M5).
 - 18 new JVM tests (socket framing, engine messages), written by Gemini 3.8 Flash and reviewed; 64 in total.
 
 ## M5: polish (in progress)
@@ -102,3 +102,7 @@ Tested on the phone emulator (Android 16, 1080×2400) unless noted.
   - The page, mark and signature-pad drawing surfaces have descriptions, and the ink colour dots meet the 48 dp touch target.
   - Rejected: a label on the Office surface, since it could hide the embedded page's own content from screen readers.
   - Kept small on purpose: the 22 dp mark resize handles.
+- **arm64 engine:**
+  - Built with the same slim configuration (`native/lok/build-all.sh arm64-v8a`, about 3 hours in WSL).
+  - `liblo-native-code.so` is 160 MB (x86_64: 158 MB). The arm64 release APK is 228 MB uncompressed on disk, the x86_64 one 227 MB.
+  - Installed with `--abi arm64-v8a` on the phone emulator (arm64 code runs there through translation): a restored docx tab opened and rendered in about 40 s. A real arm64 phone has not been tried yet.
