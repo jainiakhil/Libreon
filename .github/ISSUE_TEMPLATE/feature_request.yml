@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest something Libreon should do
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcome! Please check the existing issues first; if it's already there, add a 👍 to it instead.
+        Libreon stays offline and free of ads, accounts, trackers and AI features, so ideas that need those won't fit.
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to do?
+      description: Describe the problem or task, not only the solution.
+      placeholder: "I'd like to export a Word document as PDF so I can share it."
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: How do you picture it working?
+  - type: textarea
+    id: else
+    attributes:
+      label: Anything else?
+      description: Screenshots of how other apps do it, links, details.

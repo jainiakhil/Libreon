@@ -49,6 +49,8 @@ The whole thing was built with two AI coding assistants doing the heavy lifting:
 
 Libreon has **no internet permission at all**. Android itself stops it from going online. There are no accounts, no analytics, no crash reporters and no "cloud" anything. Your documents never leave your device.
 
+The only web links in the app are at the bottom of Settings (the GitHub page and the coffee banner below). They open in your browser, and only if you tap them; Libreon itself still never goes online.
+
 ## Install
 
 1. Download the APK from [Releases](../../releases):
@@ -91,6 +93,20 @@ This is a **beta**. It works well on the devices it was tested on (Android emula
 - Printing and exporting Office documents to other formats aren't available yet.
 - Copy and paste inside Office documents stays within that document.
 - Apple iWork files are view-only.
+
+## Support Libreon
+
+Libreon is free and always will be: no ads, no subscriptions, no "premium" version, no nagging. If it saves you some money or frustration and you'd like to say thanks, you can [buy me a coffee](https://buymeacoffee.com/jainiakhil).
+
+That's the **only** place it will ever come up: a small banner at the very bottom of Settings (⋮ → Settings). No pop-ups, no reminders, no features held back. Ignoring it is completely fine.
+
+## Contributing
+
+Bug reports, ideas and fixes are all welcome, and you don't need to be a developer to help.
+
+- **Found a bug?** [Open a bug report](../../issues/new?template=bug_report.yml). You can also get there from the app: ⋮ → Settings → *Report a problem or suggest a feature*.
+- **Have an idea?** [Suggest a feature](../../issues/new?template=feature_request.yml), or give a 👍 to an existing one.
+- **Want to fix something yourself?** Fork the repository, make your change on a branch, and open a pull request. [CONTRIBUTING.md](CONTRIBUTING.md) walks through it step by step, along with the few rules every change keeps (offline, no ads or trackers, clean room).
 
 ## License
 
