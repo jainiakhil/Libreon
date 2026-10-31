@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package dev.offlineoffice.app.tabs
 
+import android.content.Context
 import android.net.Uri
 import android.util.Log
 import dev.offlineoffice.app.data.AppDatabase
@@ -56,6 +57,7 @@ sealed interface SaveResult {
  * All public methods must be called from the main thread.
  */
 class TabManager(
+    private val context: Context,
     private val db: AppDatabase,
     private val files: FileAccess,
     private val recoveryRoot: File,
@@ -140,7 +142,10 @@ class TabManager(
                 val tab = _tabs.value.firstOrNull { it.id == id } ?: return@withLock
                 _activeId.value = id
                 updateTab(tab.copy(lastActiveAt = System.currentTimeMillis()))
-                if (_sessions.value[id] !is SessionState.Ready) load(tab)
+                if (_sessions.value[id] !is SessionState.Ready) {
+                    makeRoomFor(tab)
+                    load(tab)
+                }
                 enforceBudget(keep = id)
             }
         }
@@ -299,7 +304,7 @@ class TabManager(
     private fun createSession(tab: TabEntity): DocumentSession = when (tab.kind.engine) {
         DocumentKind.Engine.PDF -> PdfSession(tab.id)
         DocumentKind.Engine.TEXT -> TextSession(tab.id, tab.kind)
-        DocumentKind.Engine.OFFICE -> OfficeSession(tab.id, tab.kind)
+        DocumentKind.Engine.OFFICE -> OfficeSession(tab.id, tab.kind, context, File(context.noBackupFilesDir, "office/${tab.id}"))
     }
 
     private fun watchDirty(id: String, session: DocumentSession) {
@@ -354,6 +359,20 @@ class TabManager(
         recoveryJobs.remove(id)?.cancel()
         (_sessions.value[id] as? SessionState.Ready)?.session?.let { runCatching { it.close() } }
         _sessions.update { it - id }
+    }
+
+    /**
+     * Parks sessions of [tab]'s engine so that loading it stays within budget. This must happen
+     * before the load: the Office engine drops its previous document as soon as it opens the
+     * next, so that document has to be checkpointed and closed first.
+     */
+    private suspend fun makeRoomFor(tab: TabEntity) {
+        _sessions.value.keys
+            .mapNotNull { id -> _tabs.value.firstOrNull { it.id == id } }
+            .filter { it.id != tab.id && it.kind.engine == tab.kind.engine }
+            .sortedByDescending { it.lastActiveAt }
+            .drop(budget.limitFor(tab.kind.engine) - 1)
+            .forEach { park(it.id) }
     }
 
     private suspend fun enforceBudget(keep: String) {

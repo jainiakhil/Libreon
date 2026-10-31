@@ -11,12 +11,12 @@ import dev.offlineoffice.app.ui.viewers.pdf.PdfViewer
 
 /** Shows the viewer/editor for a loaded session. Keyed so each tab keeps its own UI state. */
 @Composable
-fun DocumentHost(session: DocumentSession) {
+fun DocumentHost(session: DocumentSession, onSave: () -> Unit) {
     key(session) {
         when (session) {
             is PdfSession -> PdfViewer(session)
             is TextSession -> TextEditorView(session)
-            is OfficeSession -> OfficePlaceholderView(session)
+            is OfficeSession -> OfficeView(session, onSave)
         }
     }
 }

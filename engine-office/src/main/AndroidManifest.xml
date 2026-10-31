@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- The engine ends its process when a document closes, so it runs in its own. -->
+        <service
+            android:name="dev.offlineoffice.office.OfficeService"
+            android:exported="false"
+            android:process=":office" />
+    </application>
+</manifest>

@@ -14,4 +14,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "OfflineOffice"
-include(":app", ":engine-pdf")
+include(":app", ":engine-pdf", ":engine-office")

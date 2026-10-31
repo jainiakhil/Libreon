@@ -15,8 +15,17 @@ Results of each milestone as built and tested. Devices: Android 16 emulator (x86
 - **No PDFium clash:** the engine was built with `--disable-pdfimport --disable-pdfium` and exports no `FPDF*` symbols.
 
 **Problems found**
-- **Size.** `liblo-native-code.so` is 204 MB stripped (76 MB gzip), and the upstream test APK is 262 MB. A slimming option set is now in `build-engine.sh` (no DB, scripting, Java, avmedia, CoinMP, ZXing, galleries, templates or bundled dictionaries, plus LTO and `-Os`), cross-checked against `configure.ac`. It takes effect on the next engine rebuild.
-- **Process kill on close.** Upstream `LOActivity` kills the app process when a document closes. M4 must host the engine without that, since tabs share our process.
+- **Size.** `liblo-native-code.so` was 204 MB stripped (76 MB gzip), and the upstream test APK 262 MB. Slimming results (x86_64, all stripped):
+
+  | Step | Library | gzip |
+  |---|---|---|
+  | M0 baseline | 204 MB | 76 MB |
+  | Feature disables (DB, scripting, Java, avmedia, CoinMP, ZXing, galleries, templates, dictionaries) | 192 MB | — |
+  | `-Os` passed to make (`.text` 86 → 74 MB) | 180 MB | 67 MB |
+  | RELR relocations (`.rela.dyn` 21 → 0.4 MB) | **158 MB** | **65 MB** |
+
+  LTO is not usable (it adds a GCC-only linker flag that NDK clang rejects). RELR needed a second change: the final library link in `android/Bootstrap/Makefile.shared` ignores `LDFLAGS`, so `build-engine.sh` adds the flag to that line in the build tree. The 33 MB ICU data file is the next candidate (see architecture §10).
+- **Process kill on close.** Confirmed in M4: on Android, closing a document ends LibreOffice's main loop and the process exits (status 0), whether the close comes from `BYE` or from loading the next document. See architecture §10.1.
 - **Offline message.** The front-end briefly showed "The server has been disconnected" while offline, then recovered. To be suppressed in M4.
 - **Test input.** `adb input text` does not reach the WebView's text input; key events do. This affects automated tests only.
 
@@ -51,3 +60,27 @@ Known limitation: the same file opened through two different providers gives two
   - **Fixed:** a page-cache teardown that could hand a freed page to form callbacks; an unchecked bitmap wrap in `renderPage`; unchecked JNI allocations (`NewFloatArray`, `GetStringChars`); an ignored second-read result in `ReadWide`.
   - **Rejected:** the `pageSize` array-length "issue" (the internal caller always passes a size-2 array).
   - **Known risk:** form callbacks that load more than 4 other pages could evict the caller's cached page. Unlikely; revisit if form-heavy PDFs misbehave.
+
+## M4: Word, Excel and PowerPoint (branch m4-office)
+The engine runs in its own `:office` process and draws into the app's tab (architecture §10.1). Tested on BlueStacks and the phone emulator:
+- **Opens and renders:** docx, a docx template with 52 content controls, xlsx (both sheets, formulas), a 16 MB pptx with sections, legacy .doc and .ppt. 10 tabs across all engines at once.
+- **Editing:** touch, the hardware keyboard and the on-screen keyboard reach the page; edits mark the tab unsaved.
+- **Save round trips:**
+  - docx: paragraph count unchanged (37) and the edit present; the only other difference is apostrophes written as `&apos;`, which is the same text.
+  - xlsx: the edited cell present, both sheets and all three formulas kept (the engine adds `aca="false"` to formulas).
+- **Tab switching:**
+  - Office to PDF and back keeps the same engine process and page state.
+  - Office to Office starts a new engine process in about 2 s.
+  - An unsaved spreadsheet edit survived an Office-to-Office switch (recovery copy) and a full app restart (restored banner).
+- **Bugs found and fixed during testing:**
+  - The surface sat below our window, so input never reached the page.
+  - The native `SAVE` notice was mistaken for a save request, which looped.
+  - Saving an unmodified document failed in the engine.
+- **Known gaps:**
+  - The CV template refuses edits ("write-protected content"); its form-filling restrictions still need checking.
+  - Print, export (PDF and others) and links are ignored.
+  - Clipboard is internal to the document only.
+  - On the phone the page zooms in after entering edit mode.
+  - The first open after install unpacks engine files (about 2.7 s on the emulator).
+  - arm64 has no engine build yet: arm64 APKs contain the assets but no engine library.
+- 18 new JVM tests (socket framing, engine messages), written by Gemini 3.8 Flash and reviewed; 64 in total.

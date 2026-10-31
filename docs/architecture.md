@@ -276,8 +276,8 @@ Effort assumes one developer working with an agent. These are estimates, not com
 ## 10. M4 integration design (2026-10-31, from M0 findings)
 
 Collabora's Android glue (`android/lib`, MPL-2.0) was studied: a digest from Gemini with file:line citations, the key claims re-checked by Claude.
-- **Engine lifetime.** LibreOfficeKit initialises once per process and is reused. A second `createCOOLWSD` call closes the current document and serves the next (`androidapp.cpp` guards on `lokInitialized`). Global statics (fake socket fd, file URL, document broker) allow **one live Office document at a time**, which matches §4.3's budget of `office = 1`.
-- **No explicit process kill.** Upstream's activity calls `finishAndRemoveTask()` on close because it assumes it owns the whole task. Inside our single activity a document is closed with the `BYE` message instead, and the engine stays loaded for the next tab.
+- **Engine lifetime: one document per process (corrected by device test).** The digest concluded that a second `createCOOLWSD` call closes the current document and reuses the engine (`androidapp.cpp` guards on `lokInitialized`). On the device the process ends instead: on Android each document's kit runs LibreOffice's main loop itself, closing the document (by `BYE` or by that second call) sends the kit `exit`, the main loop returns, and the process exits with status 0 about 2 s later. iOS and the desktop apps avoid this with a shared main loop (`DOCS_SHARE_PROCESS` in `common/Common.hpp`), which is not enabled for Android. Global statics (fake socket fd, file URL, document broker) also allow only **one live Office document at a time**.
+- **Consequence.** The engine cannot share our main process with the tabs, or closing an Office tab would kill the app. See §10.1 for the options.
 - **JNI binding.** The prebuilt `libandroidapp` exports JNI functions bound to the class names `org.libreoffice.androidlib.LOActivity` and `COWebViewClient`. We provide our own small Kotlin bridge classes under those names (plain classes, not Activities) rather than patching native code. Upstream's Java classes are not shipped.
 - **Our `OfficeSession`** owns:
   - a WebView loading the local front-end (`dist/cool.html`) through the bridge, with all non-local requests refused
@@ -290,6 +290,23 @@ Collabora's Android glue (`android/lib`, MPL-2.0) was studied: a digest from Gem
   |---|---|
   | M0 baseline | 204 MB |
   | Unused features removed | 192 MB |
-  | Real `-Os` + compact RELR relocations + API level 31 | in progress |
+  | `-Os` (passed to make) | 180 MB |
+  | Compact RELR relocations (API level 31, also on the final link line) | 158 MB |
 
   ICU locale data is 33 MB of prebuilt `icudt78l.dat`. It can be trimmed later with `icupkg` (dropping whole categories), but only with tests for sorting and line-breaking.
+
+### 10.1 Hosting the engine (decided 2026-10-31: option 2)
+
+Options considered:
+1. **Separate `:office` process with its own Activity**, as upstream does. Proven, but the Office screen would draw its own header instead of the shared tab bar.
+2. **Separate `:office` process rendered into the main window** with `SurfaceControlViewHost`. The tab bar stays unchanged. **Chosen**, after a prototype showed touch, focus, the hardware keyboard and the on-screen keyboard all work.
+3. **Port the Android glue to the shared main loop** (`DOCS_SHARE_PROCESS`). No restarts and room for several open documents; a substantial patch to Collabora's native code. Possible future update.
+
+How it works:
+- `OfficeService` (in `:engine-office`, `android:process=":office"`) hosts the engine and one `OfficeDocument`: the bridge, the fake socket and the front-end WebView. The page is drawn through a `SurfaceControlViewHost` whose `SurfacePackage` goes to the app.
+- `OfficeClient` (app process) binds the service, exchanges `Messenger` messages (open, attach, resize, detach, save; state, modified, save-requested, saved) and shows the surface in a `SurfaceView` placed above our window (`setZOrderOnTop`), so input reaches the page.
+- Each Office document gets a fresh process. Because closing a document would end the process anyway, the client never sends `BYE`: closing a tab, switching to another Office tab (after the TabManager's checkpoint) or memory pressure simply ends the process (`Process.killProcess`, same uid). Office-to-Office switches take about 2 s.
+- Switching to a PDF or text tab only detaches the surface; the engine keeps the document and the page state.
+- The app's `Application` does nothing in `:office` except give WebView its own data directory there.
+- Saving: the engine saves its working file (`save` protocol command, waits for the `.uno:Save` result), then the TabManager writes it to the original with its usual verified SAF write. An unmodified document is not saved by the engine (LibreOffice refuses); its file is already current.
+- The page's own Save button arrives as a `save …` protocol message and runs the app's save. The native `SAVE` message only reports that the engine saved and is ignored.

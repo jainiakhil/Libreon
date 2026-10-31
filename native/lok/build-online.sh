@@ -10,8 +10,8 @@ unset MSYSTEM
 
 ABI="${1:?usage: build-online.sh <arm64-v8a|x86_64>}"
 SRC="${CO_SRC:-$HOME/co}"
-ENGINE="$HOME/engine-$ABI"
-WORK="$HOME/online-$ABI"
+ENGINE="$HOME/engine-$ABI${ENGINE_TAG:+-$ENGINE_TAG}"
+WORK="$HOME/online-$ABI${ENGINE_TAG:+-$ENGINE_TAG}"
 export ANDROID_HOME=/opt/android-sdk
 
 [ -f "$ENGINE/instdir/program/soffice" ] || [ -d "$ENGINE/workdir" ] || {
