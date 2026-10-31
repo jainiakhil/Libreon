@@ -41,6 +41,7 @@ class OfficeService : Service() {
             P.RESIZE -> host?.relayout(msg.arg1, msg.arg2)
             P.DETACH -> detach()
             P.SAVE -> save(msg.arg1)
+            P.THEME -> document?.setDarkTheme(msg.arg1 == 1)
         }
     }
 

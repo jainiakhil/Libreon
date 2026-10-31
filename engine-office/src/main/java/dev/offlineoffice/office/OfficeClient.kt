@@ -111,6 +111,9 @@ class OfficeClient(context: Context) {
         if (view === surfaceView) send(P.RESIZE, width, height)
     }
 
+    /** Follows a change of the system theme. */
+    fun setDarkTheme(dark: Boolean) = send(P.THEME, if (dark) 1 else 0)
+
     fun detach(view: SurfaceView) {
         if (view !== surfaceView) return
         surfaceView = null

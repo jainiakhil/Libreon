@@ -13,6 +13,8 @@ internal object OfficeProtocol {
     const val DETACH = 4
     /** arg1: request id. */
     const val SAVE = 5
+    /** arg1: 1 for the dark theme. */
+    const val THEME = 6
 
     // Service to client
     /** arg1: the service's pid. */

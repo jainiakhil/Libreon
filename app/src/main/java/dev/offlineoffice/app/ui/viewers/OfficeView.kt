@@ -3,6 +3,7 @@ package dev.offlineoffice.app.ui.viewers
 
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,6 +34,8 @@ fun OfficeView(session: OfficeSession, onSave: () -> Unit, onReload: () -> Unit)
     val state by document.state.collectAsState()
     val currentOnSave by rememberUpdatedState(onSave)
     LaunchedEffect(document) { document.saveRequests.collect { currentOnSave() } }
+    val dark = isSystemInDarkTheme()
+    LaunchedEffect(document, dark) { document.setDarkTheme(dark) }
 
     Box(Modifier.fillMaxSize()) {
         AndroidView(

@@ -70,6 +70,7 @@ internal class OfficeDocument(private val context: Context, val file: File) {
 
     /** Starts loading. Progress and failures are reported through [state]. */
     suspend fun open(darkTheme: Boolean) {
+        this.darkTheme = darkTheme
         OfficeEngine.prepare(context)
         val notebookbar = context.resources.configuration.smallestScreenWidthDp >= 600
         val fileUrl = Uri.fromFile(file).toString()
@@ -88,6 +89,15 @@ internal class OfficeDocument(private val context: Context, val file: File) {
             .apply { if (darkTheme) appendQueryParameter("darkTheme", "true") }
             .build().toString()
         webView.loadUrl(page)
+    }
+
+    private var darkTheme: Boolean? = null
+
+    /** Switches the page between light and dark, as the front-end expects from its host. */
+    fun setDarkTheme(dark: Boolean) {
+        if (darkTheme == dark) return
+        darkTheme = dark
+        deliver((if (dark) "mobile: darkthemeactivated" else "mobile: lightthemeactivated").toByteArray())
     }
 
     /** Saves the document to [file], in its own format. */
