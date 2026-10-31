@@ -153,12 +153,16 @@ class PdfDocument private constructor(private var handle: Long) : Closeable {
     }
 
     companion object {
+        private const val MIN_ERROR = -1000L
+
         /** Opens [pfd]; the descriptor is duplicated, so the caller keeps ownership of [pfd]. */
         fun open(pfd: ParcelFileDescriptor, password: String? = null): PdfDocument {
             val length = pfd.statSize
             val fd = pfd.dup().detachFd()
             val result = PdfiumNative.open(fd, length, password)
-            if (result < 0) throw PdfOpenException((-result).toInt())
+            // Errors are small negative codes. A handle can look negative too: on devices with
+            // tagged pointers (e.g. Samsung Galaxy, Android 14+) the top byte of a heap address is set.
+            if (result in MIN_ERROR..-1L) throw PdfOpenException((-result).toInt())
             return PdfDocument(result)
         }
     }

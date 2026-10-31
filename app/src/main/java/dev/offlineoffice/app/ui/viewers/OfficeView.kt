@@ -3,7 +3,6 @@ package dev.offlineoffice.app.ui.viewers
 
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,14 +39,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.isVisible
+import dev.offlineoffice.app.OfficeApp
 import dev.offlineoffice.app.doc.DocumentKind
 import dev.offlineoffice.app.session.OfficeSession
+import dev.offlineoffice.app.ui.LocalDarkTheme
 import dev.offlineoffice.office.OfficeClient
 
 /** The engine's page for an Office document, drawn by the engine process into a surface of ours. */
@@ -58,7 +60,7 @@ fun OfficeView(session: OfficeSession, onSave: () -> Unit, onReload: () -> Unit)
     val wordCount by document.wordCount.collectAsState()
     val currentOnSave by rememberUpdatedState(onSave)
     LaunchedEffect(document) { document.saveRequests.collect { currentOnSave() } }
-    val dark = isSystemInDarkTheme()
+    val dark = LocalDarkTheme.current
     LaunchedEffect(document, dark) { document.setDarkTheme(dark) }
     var findOpen by rememberSaveable(session) { mutableStateOf(false) }
     LaunchedEffect(session) { session.findRequests.collect { findOpen = true } }
@@ -71,6 +73,20 @@ fun OfficeView(session: OfficeSession, onSave: () -> Unit, onReload: () -> Unit)
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+            }
+        }
+        val settings = (LocalContext.current.applicationContext as OfficeApp).settings
+        val tipSeen by settings.officeTipSeen.collectAsState()
+        if (!tipSeen && state == OfficeClient.State.Ready) {
+            Surface(color = MaterialTheme.colorScheme.tertiaryContainer) {
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Tip: double-tap a word (or long-press it while reading) to select it, then drag the handles.",
+                        Modifier.weight(1f).padding(vertical = 8.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    TextButton(onClick = settings::dismissOfficeTip) { Text("Got it") }
+                }
             }
         }
         if (findOpen && state == OfficeClient.State.Ready) {

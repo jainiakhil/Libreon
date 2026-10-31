@@ -10,7 +10,7 @@
 #
 # Usage (needs Pillow): python3 art/make_icons.py
 import os
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RES = os.path.join(HERE, "..", "app", "src", "main", "res")
@@ -46,6 +46,11 @@ def foreground_art():
             # Undo the blend with the tile so edges stay clean on any background.
             rgb = tuple(max(0, min(255, round((c[i] - (1 - a) * bg[i]) / a))) for i in range(3))
             dst[x, y] = rgb + (round(a * 255),)
+    # Drop isolated specks (stray shadow pixels on the sheet); the artwork's outlines are
+    # far thicker than the 5 px opening, which keeps everything attached to it.
+    alpha = out.getchannel("A")
+    solid = alpha.point(lambda v: 255 if v > 0 else 0).filter(ImageFilter.MinFilter(5)).filter(ImageFilter.MaxFilter(9))
+    out.putalpha(ImageChops.multiply(alpha, solid))
     return out
 
 
@@ -86,6 +91,11 @@ def main():
         px, art_px = round(108 * factor), round(ART_DP * factor)
         layer(fg, px, art_px).save(os.path.join(folder, "ic_launcher_foreground.png"), optimize=True)
         layer(mono, px, art_px).save(os.path.join(folder, "ic_launcher_monochrome.png"), optimize=True)
+
+    # The artwork alone (transparent around it), for the logo on the app's home screen.
+    nodpi = os.path.join(RES, "drawable-nodpi")
+    os.makedirs(nodpi, exist_ok=True)
+    layer(fg, 560, 512).crop(layer(fg, 560, 512).getbbox()).save(os.path.join(nodpi, "libreon_logo.png"), optimize=True)
 
     # Play Store icon (512 px, full square; the store applies its own rounding).
     store = Image.new("RGBA", (512, 512), TILE_COLOUR + (255,))

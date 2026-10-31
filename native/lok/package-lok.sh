@@ -23,5 +23,10 @@ mkdir -p "$OUT/jniLibs"
 mv "$TMP/jni/$ABI" "$OUT/jniLibs/$ABI"
 mv "$TMP/assets" "$OUT/assets"
 
+# Upstream bug: a few dark-theme icons (the slideshow button among them) keep the light
+# theme's dark grey, so on a dark toolbar they look disabled. Give them the dark theme's ink.
+grep -l 'fill="#3a3a38"' "$OUT/assets/dist/images/dark/"*.svg 2>/dev/null |
+  xargs -r sed -i 's/fill="#3a3a38"/fill="#fafafa"/g'
+
 echo "packaged $AAR"
 du -sh "$OUT/jniLibs/$ABI" "$OUT/assets"

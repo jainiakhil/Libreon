@@ -31,6 +31,9 @@ class OfficeService : Service() {
     private var client: Messenger? = null
     private var document: OfficeDocument? = null
     private var host: SurfaceControlViewHost? = null
+    /** The app window and display [host] was made for; it is reused when the same window comes back. */
+    private var hostToken: IBinder? = null
+    private var hostDisplay = -1
 
     override fun onBind(intent: Intent): IBinder = messenger.binder
 
@@ -83,18 +86,42 @@ class OfficeService : Service() {
 
     private fun attach(data: Bundle, width: Int, height: Int) {
         val doc = document ?: return
-        detach()
-        val display = getSystemService(DisplayManager::class.java).getDisplay(data.getInt(P.KEY_DISPLAY)) ?: return
         doc.hardwareKeyboard = data.getBoolean(P.KEY_KEYBOARD)
-        val newHost = SurfaceControlViewHost(createDisplayContext(display), display, data.getBinder(P.KEY_HOST_TOKEN))
-        newHost.setView(doc.webView, width, height)
-        host = newHost
-        send(P.SURFACE, data = Bundle().apply { putParcelable(P.KEY_SURFACE, newHost.surfacePackage) })
+        val token = data.getBinder(P.KEY_HOST_TOKEN)
+        val displayId = data.getInt(P.KEY_DISPLAY)
+        try {
+            // The app shows the page again in the same window (back from the background, a
+            // tab switch): hand it a new package of the same surface. Moving the page into a
+            // fresh host each time can leave it blank on some devices.
+            val existing = host?.takeIf { token == hostToken && displayId == hostDisplay }
+            if (existing != null) {
+                existing.relayout(width, height)
+                send(P.SURFACE, data = Bundle().apply { putParcelable(P.KEY_SURFACE, existing.surfacePackage) })
+                return
+            }
+            releaseHost()
+            val display = getSystemService(DisplayManager::class.java).getDisplay(displayId) ?: return
+            val newHost = SurfaceControlViewHost(createDisplayContext(display), display, token)
+            newHost.setView(doc.webView, width, height)
+            host = newHost
+            hostToken = token
+            hostDisplay = displayId
+            send(P.SURFACE, data = Bundle().apply { putParcelable(P.KEY_SURFACE, newHost.surfacePackage) })
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "attach", e)
+            releaseHost()
+            send(P.STATE, arg1 = P.STATE_FAILED, data = messageBundle("The document could not be shown (${e.message ?: e.javaClass.simpleName})"))
+        }
     }
 
-    private fun detach() {
+    /** The app's surface went away. The host is kept so the same window can show it again. */
+    private fun detach() = Unit
+
+    private fun releaseHost() {
         host?.release()
         host = null
+        hostToken = null
+        hostDisplay = -1
     }
 
     private fun save(requestId: Int) {

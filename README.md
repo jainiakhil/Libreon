@@ -42,7 +42,7 @@ The whole thing was built with two AI coding assistants doing the heavy lifting:
 - **Tabs:** keep lots of documents open at once. If Android closes the app in the background, your unsaved changes are still there when you come back.
 - **Search** your open, recent and recently closed files by name.
 - **Word count** for any document and for your selection.
-- Light and dark themes that follow your phone, and a themed icon that matches your wallpaper.
+- Light, dark or follow-the-system themes (set in Settings), "light pages" for a single document while the app is dark, and a themed icon that matches your wallpaper.
 - Screen-reader friendly controls.
 
 ## Privacy

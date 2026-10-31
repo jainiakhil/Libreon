@@ -2,7 +2,6 @@
 package dev.offlineoffice.app.session
 
 import android.content.Context
-import android.content.res.Configuration
 import dev.offlineoffice.app.doc.DocumentKind
 import dev.offlineoffice.app.text.WordCounter
 import dev.offlineoffice.office.OfficeClient
@@ -27,6 +26,8 @@ class OfficeSession(
     override val kind: DocumentKind,
     private val context: Context,
     private val workDir: File,
+    /** Whether the page should open in the dark theme. */
+    private val darkTheme: () -> Boolean,
 ) : DocumentSession, DocumentTools {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -59,8 +60,7 @@ class OfficeSession(
         document = OfficeClient(context)
         scope.launch { document.modified.collect { if (it) _dirty.value = true } }
         scope.launch { document.wordCount.collect { line -> line?.let(WriterWordCount::parse)?.let { lastTotals = it } } }
-        val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        document.open(working, darkTheme = dark, readOnly = readOnly)
+        document.open(working, darkTheme = darkTheme(), readOnly = readOnly)
     }
 
     override fun captureViewState(): String? = null

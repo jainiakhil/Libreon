@@ -16,7 +16,7 @@ internal object PdfiumNative {
 
     @JvmStatic external fun init()
 
-    /** Takes ownership of [fd]. Returns a handle, or a negative PDFium error code. */
+    /** Takes ownership of [fd]. Returns a handle, or a small negative PDFium error code (handles may also be negative: tagged pointers). */
     @JvmStatic external fun open(fd: Int, length: Long, password: String?): Long
 
     @JvmStatic external fun close(handle: Long)

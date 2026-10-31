@@ -2,15 +2,22 @@
 package dev.offlineoffice.app
 
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
+import androidx.activity.SystemBarStyle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
+import dev.offlineoffice.app.data.Settings
 import dev.offlineoffice.app.doc.DocumentKind
 import dev.offlineoffice.app.tabs.OpenOrigin
 import dev.offlineoffice.app.tabs.SaveResult
@@ -39,9 +46,24 @@ class MainActivity : ComponentActivity() {
         // The activity may be recreated (e.g. a window resize) while the save picker is open.
         pendingSaveAs = savedInstanceState?.getString(KEY_PENDING_SAVE_AS)
         setContent {
-            AppTheme {
+            val mode by app.settings.theme.collectAsState()
+            val lightTabs by app.settings.lightTabs.collectAsState()
+            val dark = when (mode) {
+                Settings.ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                Settings.ThemeMode.LIGHT -> false
+                Settings.ThemeMode.DARK -> true
+            }
+            // System bar icons follow the app theme, which may differ from the system's.
+            DisposableEffect(dark) {
+                val style = if (dark) SystemBarStyle.dark(Color.TRANSPARENT) else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+                onDispose {}
+            }
+            app.tabs.darkPagesFor = { id -> dark && id !in lightTabs }
+            AppTheme(dark) {
                 AppRoot(
                     tabs = app.tabs,
+                    settings = app.settings,
                     onOpen = { openDocuments.launch(DocumentKind.pickerMimeTypes) },
                     onSaveAs = ::launchSaveAs,
                     onMessage = { Toast.makeText(this, it, Toast.LENGTH_LONG).show() },

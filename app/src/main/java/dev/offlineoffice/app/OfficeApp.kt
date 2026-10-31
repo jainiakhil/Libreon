@@ -6,6 +6,7 @@ import android.app.Application
 import android.content.ComponentCallbacks2
 import android.webkit.WebView
 import dev.offlineoffice.app.data.AppDatabase
+import dev.offlineoffice.app.data.Settings
 import dev.offlineoffice.app.doc.FileAccess
 import dev.offlineoffice.app.session.SessionBudget
 import dev.offlineoffice.app.tabs.TabManager
@@ -20,6 +21,8 @@ class OfficeApp : Application() {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     lateinit var tabs: TabManager
         private set
+    lateinit var settings: Settings
+        private set
 
     /** Completes once the persisted tab bar has been restored. */
     val ready = CompletableDeferred<Unit>()
@@ -32,6 +35,7 @@ class OfficeApp : Application() {
             WebView.setDataDirectorySuffix("office")
             return
         }
+        settings = Settings(this)
         val db = AppDatabase.create(this)
         val heapMb = getSystemService(ActivityManager::class.java).largeMemoryClass
         tabs = TabManager(

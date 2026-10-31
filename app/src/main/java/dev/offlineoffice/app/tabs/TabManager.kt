@@ -65,6 +65,9 @@ class TabManager(
     private val scope: CoroutineScope,
 ) {
     private val mutex = Mutex()
+
+    /** Whether a tab's Office page should open dark (the app theme, unless the tab asks for light pages). */
+    var darkPagesFor: (tabId: String) -> Boolean = { false }
     private val _tabs = MutableStateFlow<List<TabEntity>>(emptyList())
     val tabs: StateFlow<List<TabEntity>> = _tabs.asStateFlow()
 
@@ -168,6 +171,28 @@ class TabManager(
                 _tabs.update { list -> list.filterNot { it.id == id } }
                 _restored.update { it - id }
                 if (_activeId.value == id) _activeId.value = _tabs.value.maxByOrNull { it.lastActiveAt }?.id
+            }
+        }
+    }
+
+    /** Closes every tab. The UI must confirm first if any is dirty. */
+    fun closeAll() = _tabs.value.map { it.id }.forEach(::close)
+
+    /** Closes every tab without keeping it, and forgets recent and recently closed files. */
+    fun clearHome() {
+        scope.launch {
+            mutex.withLock {
+                for (tab in _tabs.value) {
+                    unload(tab.id)
+                    files.deleteWorkingDir(tab.id)
+                    File(recoveryRoot, tab.id).deleteRecursively()
+                    db.tabs().delete(tab.id)
+                }
+                db.tabs().deleteClosed()
+                db.recents().clear()
+                _tabs.value = emptyList()
+                _restored.value = emptySet()
+                _activeId.value = null
             }
         }
     }
@@ -318,7 +343,7 @@ class TabManager(
     private fun createSession(tab: TabEntity): DocumentSession = when (tab.kind.engine) {
         DocumentKind.Engine.PDF -> PdfSession(tab.id)
         DocumentKind.Engine.TEXT -> TextSession(tab.id, tab.kind)
-        DocumentKind.Engine.OFFICE -> OfficeSession(tab.id, tab.kind, context, File(context.noBackupFilesDir, "office/${tab.id}"))
+        DocumentKind.Engine.OFFICE -> OfficeSession(tab.id, tab.kind, context, File(context.noBackupFilesDir, "office/${tab.id}")) { darkPagesFor(tab.id) }
     }
 
     private fun watchDirty(id: String, session: DocumentSession) {

@@ -82,6 +82,9 @@ interface TabDao {
     @Query("DELETE FROM tabs WHERE id = :id")
     suspend fun delete(id: String)
 
+    @Query("DELETE FROM tabs WHERE closedAt IS NOT NULL")
+    suspend fun deleteClosed()
+
     /** Keep only the newest [keep] closed tabs. */
     @Query(
         "DELETE FROM tabs WHERE closedAt IS NOT NULL AND id NOT IN " +

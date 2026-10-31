@@ -6,7 +6,6 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -20,6 +19,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.offlineoffice.app.text.MarkdownRenderer
 import dev.offlineoffice.app.text.PreviewColors
+import dev.offlineoffice.app.ui.LocalDarkTheme
 import java.io.ByteArrayInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,7 +33,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun MarkdownPreview(markdown: String, onLink: (String) -> Unit, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
-    val dark = isSystemInDarkTheme()
+    val dark = LocalDarkTheme.current
     val colors = PreviewColors(
         background = scheme.surface.hex(),
         text = scheme.onSurface.hex(),

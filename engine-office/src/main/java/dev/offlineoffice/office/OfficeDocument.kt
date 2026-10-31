@@ -4,8 +4,14 @@ package dev.offlineoffice.office
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.graphics.PointF
 import android.net.Uri
+import android.os.SystemClock
 import android.util.Log
+import android.view.GestureDetector
+import android.view.InputDevice
+import android.view.MotionEvent
+import android.view.View
 import android.webkit.WebView
 import java.io.File
 import java.io.IOException
@@ -162,6 +168,51 @@ internal class OfficeDocument(private val context: Context, val file: File) {
             settings.allowContentAccess = false
             webViewClient = COWebViewClient(socket)
             addJavascriptInterface(bridge, "COOLMessageHandler")
+            // Looked up per touch: the listener is initialised after this view.
+            setOnTouchListener { v, e -> longPressSelects.onTouch(v, e) }
+        }
+    }
+
+    /** The front-end is in edit mode (it says so with EDITMODE messages). */
+    @Volatile private var editing = false
+
+    /**
+     * In view mode the front-end selects a word on a double-tap and ignores a long-press, which
+     * is where Android users try first. A long-press there is turned into a double-tap.
+     */
+    private val longPressSelects = object : View.OnTouchListener {
+        private var pressedAt: PointF? = null
+        private var synthesizing = false
+        private val detector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onLongPress(e: MotionEvent) {
+                pressedAt = PointF(e.x, e.y)
+            }
+        })
+
+        @SuppressLint("ClickableViewAccessibility")
+        override fun onTouch(v: View, event: MotionEvent): Boolean {
+            if (synthesizing) return false
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) pressedAt = null
+            detector.onTouchEvent(event)
+            val at = pressedAt
+            if (event.actionMasked == MotionEvent.ACTION_UP && at != null && !editing) {
+                pressedAt = null
+                v.post { doubleTap(v, at) }
+            }
+            return false
+        }
+
+        private fun doubleTap(v: View, at: PointF) {
+            synthesizing = true
+            val t = SystemClock.uptimeMillis()
+            for ((offset, action) in listOf(0L to MotionEvent.ACTION_DOWN, 40L to MotionEvent.ACTION_UP, 120L to MotionEvent.ACTION_DOWN, 160L to MotionEvent.ACTION_UP)) {
+                val down = if (offset < 100) t else t + 120
+                val e = MotionEvent.obtain(down, t + offset, action, at.x, at.y, 0)
+                e.source = InputDevice.SOURCE_TOUCHSCREEN
+                v.dispatchTouchEvent(e)
+                e.recycle()
+            }
+            synthesizing = false
         }
     }
 
@@ -190,6 +241,7 @@ internal class OfficeDocument(private val context: Context, val file: File) {
             // the original) runs instead, so the message is not passed on.
             "save" -> _saveRequests.tryEmit(Unit)
             "hideProgressbar" -> _state.compareAndSet(State.Loading, State.Ready)
+            "EDITMODE" -> editing = message.substringAfter(' ', "").trim() == "on"
             "LIGHT_SCREEN", "DIM_SCREEN" -> webView.post { webView.keepScreenOn = command == "LIGHT_SCREEN" }
             // Not offered yet: printing, export, and opening links (the app is offline).
             "PRINT", "downloadas", "exportfile", "HYPERLINK", "REQUESTFILECOPY" ->

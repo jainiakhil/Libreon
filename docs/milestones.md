@@ -129,3 +129,15 @@ Requested after M5: file search, find in documents, word counts, PDF highlights,
 - **Release build:** signed with a private release key kept outside the repository (`signing/`, git-ignored; release builds fall back to the debug key without it). Native libraries are now compressed in the APK. Release APKs: arm64 115 MB, x86_64 118 MB (were 228 MB). Checked on the release build (minified): launch, Keynote import, PDF text selection with word count.
 - **Fixed:** opening a file from Home now brings its tab to the front (it used to stay on Home).
 - **Name and icon:** the app is now **Libreon** ("Work freely"), app ID `dev.libreon.app`. The adaptive launcher icon (full colour, plus a monochrome layer for themed icons) is cut from the supplied artwork (`art/libreon-icons-sheet.png`) by `art/make_icons.py`, which only separates the art from its tile and centres it in the safe zone; checked under circle, squircle and square masks. First beta: `0.9.0-beta.1`.
+
+## Beta 2: fixes from the first phone test (Galaxy S24 Ultra, Android 17)
+- **PDFs would not open** ("PDFium error 2132311536"): the phone tags heap pointers in their top byte, so the document handle looked negative and was taken for an error code. Only PDFium's small error codes are errors now. The emulator does not tag pointers, so this needs checking on the phone.
+- **Selecting text in Office documents:** the front-end selects on a double-tap, not a long-press. A long-press in view mode is now turned into a double-tap (tested: selects the word with handles), and a one-time tip explains it. In edit mode a long-press still opens the front-end's menu.
+- **Blank Office page after editing and coming back:** not reproduced on the emulator. The engine process now reuses its display host when the same app window comes back, instead of moving the page into a new one each time, and reports a visible error with Reload if showing the page fails.
+- **Back** from a document now goes to Home instead of leaving the app.
+- **Close all tabs** and **Clear Home** (tabs, recent and recently closed), each confirmed first; **Discard changes** for a document with unsaved edits (reopens it as saved, in view mode).
+- **Settings:** theme (follow system, light, dark), the tab bar on wide screens, version and licenses. Office pages follow the app theme; **Light pages** in a document's menu keeps that document light while the app is dark.
+- **Home:** a header with the logo, name and caption, and the big logo at the end of the page.
+- **Landscape:** a button in the top bar hides or shows the tab bar.
+- **Slideshow button looked disabled:** an upstream bug: 16 dark-theme icons kept the light theme's dark grey. `package-lok.sh` now recolours them.
+- Not yet fixed (need the files): "Invalid value" when filling cells in Excel forms, and the badly formatted "Font Disallows Editing" message in a PowerPoint file.

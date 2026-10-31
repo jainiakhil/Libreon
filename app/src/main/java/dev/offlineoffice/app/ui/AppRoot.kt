@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package dev.offlineoffice.app.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -11,13 +13,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -43,10 +51,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.offlineoffice.app.R
+import dev.offlineoffice.app.data.Settings
 import dev.offlineoffice.app.data.TabEntity
 import dev.offlineoffice.app.session.DocumentTools
 import dev.offlineoffice.app.session.SaveAdvice
@@ -61,6 +72,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun AppRoot(
     tabs: TabManager,
+    settings: Settings,
     onOpen: () -> Unit,
     onSaveAs: (tabId: String, suggestedName: String) -> Unit,
     onMessage: (String) -> Unit,
@@ -69,11 +81,19 @@ fun AppRoot(
     val activeId by tabs.activeId.collectAsState()
     val sessions by tabs.sessions.collectAsState()
     val restored by tabs.restored.collectAsState()
+    val lightTabs by settings.lightTabs.collectAsState()
+    val tabBar by settings.tabBar.collectAsState()
+    val dark = LocalDarkTheme.current
+    val wide = LocalConfiguration.current.screenWidthDp >= 600
     val scope = rememberCoroutineScope()
 
     var showHome by remember { mutableStateOf(false) }
     var showSwitcher by remember { mutableStateOf(false) }
     var showLicenses by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    var confirmCloseAll by remember { mutableStateOf(false) }
+    var confirmClearHome by remember { mutableStateOf(false) }
+    var confirmDiscard by remember { mutableStateOf<TabEntity?>(null) }
     var confirmClose by remember { mutableStateOf<TabEntity?>(null) }
     var conflictTab by remember { mutableStateOf<TabEntity?>(null) }
     var saveAsNewTab by remember { mutableStateOf<TabEntity?>(null) }
@@ -82,6 +102,10 @@ fun AppRoot(
     // A document opened (or switched to) while Home is showing comes to the front.
     LaunchedEffect(activeId) { showHome = false }
     val active = tabList.firstOrNull { it.id == activeId }?.takeUnless { showHome }
+    LaunchedEffect(tabList) { settings.retainLightTabs(tabList.map { it.id }.toSet()) }
+
+    // Back from a document returns to Home; back on Home leaves the app as usual.
+    BackHandler(enabled = active != null) { showHome = true }
 
     fun select(id: String) {
         showHome = false
@@ -113,14 +137,18 @@ fun AppRoot(
             Column {
                 TopAppBar(
                     title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                active?.displayName ?: stringResource(R.string.app_name),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false),
-                            )
-                            if (active?.dirty == true) Badge(Modifier.padding(start = 6.dp))
+                        if (active == null) {
+                            HomeTitle()
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    active.displayName,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                if (active.dirty) Badge(Modifier.padding(start = 6.dp))
+                            }
                         }
                     },
                     navigationIcon = {
@@ -135,6 +163,14 @@ fun AppRoot(
                             }
                             IconButton(onClick = { save(active) }, enabled = active.dirty) { Icon(Icons.Outlined.Save, "Save") }
                         }
+                        if (wide && tabList.isNotEmpty()) {
+                            IconButton(onClick = { settings.setTabBar(!tabBar) }) {
+                                Icon(
+                                    if (tabBar) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                    if (tabBar) "Hide tab bar" else "Show tab bar",
+                                )
+                            }
+                        }
                         TabCountChip(count = tabList.size, onClick = { showSwitcher = true })
                         OverflowMenu(
                             hasActive = active != null,
@@ -142,12 +178,18 @@ fun AppRoot(
                             onSaveAs = { active?.let { onSaveAs(it.id, it.displayName) } },
                             onClose = { active?.let(::requestClose) },
                             onWordCount = { active?.let { tab -> tools(tab)?.let { wordCount = WordCountRequest(tab.displayName, it) } } },
+                            onDiscard = active?.takeIf { it.dirty }?.let { tab -> { confirmDiscard = tab } },
+                            lightPages = active?.takeIf { dark }?.let { it.id in lightTabs },
+                            onLightPages = { light -> active?.let { settings.setLightPages(it.id, light) } },
+                            onCloseAll = if (tabList.isNotEmpty()) ({ confirmCloseAll = true }) else null,
+                            onClearHome = if (active == null) ({ confirmClearHome = true }) else null,
+                            onSettings = { showSettings = true },
                             onLicenses = { showLicenses = true },
                         )
                     },
                 )
                 BoxWithConstraints {
-                    if (maxWidth >= 600.dp && tabList.isNotEmpty()) {
+                    if (maxWidth >= 600.dp && tabList.isNotEmpty() && tabBar) {
                         val index = tabList.indexOfFirst { it.id == active?.id }
                         PrimaryScrollableTabRow(selectedTabIndex = index.coerceAtLeast(0), edgePadding = 8.dp) {
                             tabList.forEach { tab ->
@@ -176,7 +218,15 @@ fun AppRoot(
                         )
                     }
                     when (val state = sessions[active.id]) {
-                        is SessionState.Ready -> DocumentHost(state.session, onSave = { if (active.dirty) save(active) }, onReload = { tabs.reload(active.id) })
+                        is SessionState.Ready -> {
+                            // A tab can ask for light pages while the app is dark.
+                            val light = dark && active.id in lightTabs
+                            AppTheme(dark = dark && !light) {
+                                Surface(color = MaterialTheme.colorScheme.background) {
+                                    DocumentHost(state.session, onSave = { if (active.dirty) save(active) }, onReload = { tabs.reload(active.id) })
+                                }
+                            }
+                        }
                         is SessionState.Failed -> CenteredMessage("Could not open ${active.displayName}\n${state.message}")
                         else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                     }
@@ -250,6 +300,40 @@ fun AppRoot(
     }
     wordCount?.let { WordCountDialog(it, onDismiss = { wordCount = null }) }
     if (showLicenses) LicensesDialog(onDismiss = { showLicenses = false })
+    if (showSettings) SettingsScreen(settings, onLicenses = { showLicenses = true }, onDismiss = { showSettings = false })
+    confirmDiscard?.let { tab ->
+        ConfirmDialog(
+            title = "Discard changes to ${tab.displayName}?",
+            text = "Your edits since the last save will be lost and the document reopens as it was saved.",
+            confirm = "Discard",
+            onConfirm = { confirmDiscard = null; tabs.discardChanges(tab.id) },
+            onDismiss = { confirmDiscard = null },
+        )
+    }
+    if (confirmCloseAll) {
+        val unsaved = tabList.count { it.dirty }
+        ConfirmDialog(
+            title = "Close all tabs?",
+            text = if (unsaved > 0) {
+                "$unsaved ${if (unsaved == 1) "tab has" else "tabs have"} unsaved changes, which will be lost."
+            } else {
+                "All ${tabList.size} open documents will be closed. You can reopen them from Recently closed."
+            },
+            confirm = "Close all",
+            onConfirm = { confirmCloseAll = false; showHome = false; tabs.closeAll() },
+            onDismiss = { confirmCloseAll = false },
+        )
+    }
+    if (confirmClearHome) {
+        ConfirmDialog(
+            title = "Clear Home?",
+            text = "This closes every open tab and removes all recent and recently closed files from Home. " +
+                "Unsaved changes are lost. Your files themselves are not deleted.",
+            confirm = "Clear",
+            onConfirm = { confirmClearHome = false; tabs.clearHome() },
+            onDismiss = { confirmClearHome = false },
+        )
+    }
 }
 
 @Composable
@@ -266,6 +350,14 @@ private fun OverflowMenu(
     onSaveAs: () -> Unit,
     onClose: () -> Unit,
     onWordCount: () -> Unit,
+    /** Shown when the document has unsaved changes. */
+    onDiscard: (() -> Unit)?,
+    /** null hides the item (the app is light); otherwise whether this tab uses light pages. */
+    lightPages: Boolean?,
+    onLightPages: (Boolean) -> Unit,
+    onCloseAll: (() -> Unit)?,
+    onClearHome: (() -> Unit)?,
+    onSettings: () -> Unit,
     onLicenses: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -280,15 +372,67 @@ private fun OverflowMenu(
             if (hasActive) {
                 DropdownMenuItem(text = { Text("Save as…") }, onClick = { expanded = false; onSaveAs() })
                 DropdownMenuItem(text = { Text("Word count") }, onClick = { expanded = false; onWordCount() })
+                if (lightPages != null) {
+                    DropdownMenuItem(
+                        text = { Text("Light pages") },
+                        leadingIcon = { Icon(Icons.Outlined.LightMode, null) },
+                        trailingIcon = { Checkbox(checked = lightPages, onCheckedChange = null) },
+                        onClick = { expanded = false; onLightPages(!lightPages) },
+                    )
+                }
+                onDiscard?.let { discard ->
+                    DropdownMenuItem(
+                        text = { Text("Discard changes") },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Undo, null) },
+                        onClick = { expanded = false; discard() },
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text("Close tab") },
                     leadingIcon = { Icon(Icons.Outlined.Close, null) },
                     onClick = { expanded = false; onClose() },
                 )
             }
-            DropdownMenuItem(text = { Text("Open-source licenses") }, onClick = { expanded = false; onLicenses() })
+            onCloseAll?.let { closeAll ->
+                DropdownMenuItem(text = { Text("Close all tabs") }, onClick = { expanded = false; closeAll() })
+            }
+            onClearHome?.let { clear ->
+                DropdownMenuItem(text = { Text("Clear Home") }, onClick = { expanded = false; clear() })
+            }
+            DropdownMenuItem(
+                text = { Text("Settings") },
+                leadingIcon = { Icon(Icons.Outlined.Settings, null) },
+                onClick = { expanded = false; onSettings() },
+            )
         }
     }
+}
+
+/** The app's name and caption, with its logo, for the top bar on Home. */
+@Composable
+private fun HomeTitle() {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Image(painterResource(R.drawable.libreon_logo), null, Modifier.size(36.dp))
+        Column(Modifier.padding(start = 10.dp)) {
+            Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge)
+            Text(
+                stringResource(R.string.app_tagline),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConfirmDialog(title: String, text: String, confirm: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(text) },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(confirm, color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

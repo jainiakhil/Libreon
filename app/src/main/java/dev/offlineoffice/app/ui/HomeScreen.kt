@@ -4,6 +4,7 @@ package dev.offlineoffice.app.ui
 import android.net.Uri
 import android.text.format.DateUtils
 import android.text.format.Formatter
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -40,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
@@ -81,15 +84,6 @@ fun HomeScreen(tabs: TabManager, onOpen: () -> Unit, onSelectTab: (String) -> Un
     val hasMatches = filteredOpen.isNotEmpty() || filteredRecents.isNotEmpty() || filteredClosed.isNotEmpty()
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item {
-            Text(
-                stringResource(R.string.app_tagline),
-                Modifier.fillMaxWidth().padding(top = 12.dp),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-                textAlign = TextAlign.Center,
-            )
-        }
         item {
             Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) {
                 Button(onClick = onOpen) {
@@ -185,15 +179,41 @@ fun HomeScreen(tabs: TabManager, onOpen: () -> Unit, onSelectTab: (String) -> Un
                 }
             }
         }
-        if (open.isEmpty() && recents.isEmpty() && query.isEmpty()) {
-            item {
-                Text(
-                    "Word, Excel, PowerPoint, PDF, Apple Pages, Numbers and Keynote, and text files open here. Everything stays on this device.",
-                    Modifier.fillMaxWidth().padding(32.dp),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-            }
+        if (query.isEmpty()) {
+            item { LogoFooter(showIntro = open.isEmpty() && recents.isEmpty()) }
         }
+    }
+}
+
+/** The big logo at the end of Home, with a short introduction when there is nothing else yet. */
+@Composable
+private fun LogoFooter(showIntro: Boolean) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Image(painterResource(R.drawable.libreon_logo), contentDescription = null, modifier = Modifier.size(180.dp))
+        Text(
+            stringResource(R.string.app_name),
+            Modifier.padding(top = 16.dp),
+            style = MaterialTheme.typography.headlineMedium,
+        )
+        Text(
+            stringResource(R.string.app_tagline),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            if (showIntro) {
+                "Word, Excel, PowerPoint, PDF, Apple Pages, Numbers and Keynote, and text files open here. Everything stays on this device."
+            } else {
+                "No ads, no accounts, no internet. Everything stays on this device."
+            },
+            Modifier.padding(top = 12.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
