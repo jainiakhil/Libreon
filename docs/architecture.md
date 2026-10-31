@@ -276,8 +276,8 @@ Effort assumes one developer working with an agent. These are estimates, not com
 ## 10. M4 integration design (2026-10-31, from M0 findings)
 
 Collabora's Android glue (`android/lib`, MPL-2.0) was studied: a digest from Gemini with file:line citations, the key claims re-checked by Claude.
-- **Engine lifetime.** LibreOfficeKit initialises once per process and is reused. A second `createCOOLWSD` call closes the current document and serves the next (`androidapp.cpp` guards on `lokInitialized`). Global statics (fake socket fd, file URL, document broker) allow **one live Office document at a time**, which matches §4.3's budget of `office = 1`.
-- **No explicit process kill.** Upstream's activity calls `finishAndRemoveTask()` on close because it assumes it owns the whole task. Inside our single activity a document is closed with the `BYE` message instead, and the engine stays loaded for the next tab.
+- **Engine lifetime: one document per process (corrected by device test).** The digest concluded that a second `createCOOLWSD` call closes the current document and reuses the engine (`androidapp.cpp` guards on `lokInitialized`). On the device the process ends instead: on Android each document's kit runs LibreOffice's main loop itself, closing the document (by `BYE` or by that second call) sends the kit `exit`, the main loop returns, and the process exits with status 0 about 2 s later. iOS and the desktop apps avoid this with a shared main loop (`DOCS_SHARE_PROCESS` in `common/Common.hpp`), which is not enabled for Android. Global statics (fake socket fd, file URL, document broker) also allow only **one live Office document at a time**.
+- **Consequence.** The engine cannot share our main process with the tabs, or closing an Office tab would kill the app. See §10.1 for the options.
 - **JNI binding.** The prebuilt `libandroidapp` exports JNI functions bound to the class names `org.libreoffice.androidlib.LOActivity` and `COWebViewClient`. We provide our own small Kotlin bridge classes under those names (plain classes, not Activities) rather than patching native code. Upstream's Java classes are not shipped.
 - **Our `OfficeSession`** owns:
   - a WebView loading the local front-end (`dist/cool.html`) through the bridge, with all non-local requests refused
@@ -290,6 +290,18 @@ Collabora's Android glue (`android/lib`, MPL-2.0) was studied: a digest from Gem
   |---|---|
   | M0 baseline | 204 MB |
   | Unused features removed | 192 MB |
-  | Real `-Os` + compact RELR relocations + API level 31 | in progress |
+  | `-Os` (passed to make) | 180 MB |
+  | Compact RELR relocations (API level 31, also on the final link line) | 158 MB |
 
   ICU locale data is 33 MB of prebuilt `icudt78l.dat`. It can be trimmed later with `icupkg` (dropping whole categories), but only with tests for sorting and line-breaking.
+
+### 10.1 Hosting the engine (open decision)
+
+Built and verified so far (branch `m4-office`): the `:engine-office` module (our bridge classes, the fake-socket server, engine start-up and asset unpacking, the save protocol) and an `OfficeSession` that shows the document in a tab. A docx and the 52-control CV template open and render inside the app. Closing or switching to another Office document ends the process, as described above.
+
+Options:
+1. **Separate `:office` process with its own Activity**, as upstream does. Proven; the process is restarted for each Office document (a few seconds per Office-to-Office switch); the Office screen draws its own header instead of the shared tab bar.
+2. **Separate `:office` process rendered into the main window** with `SurfaceControlViewHost` (API 30+). The tab bar stays unchanged; same restart cost; keyboard and focus handling for embedded windows need a prototype first.
+3. **Port the Android glue to the shared main loop** (`DOCS_SHARE_PROCESS`). No restarts and room for several open documents later; a substantial native change to Collabora's code, carried as our own patch.
+
+In every option a dirty Office tab is checkpointed (recovery copy) before its process ends, so switching never loses edits.

@@ -28,6 +28,7 @@ class OfficeApp : Application() {
         val db = AppDatabase.create(this)
         val heapMb = getSystemService(ActivityManager::class.java).largeMemoryClass
         tabs = TabManager(
+            context = this,
             db = db,
             files = FileAccess(this),
             recoveryRoot = File(filesDir, "recovery"),

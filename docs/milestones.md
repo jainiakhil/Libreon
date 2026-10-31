@@ -15,8 +15,17 @@ Results of each milestone as built and tested. Devices: Android 16 emulator (x86
 - **No PDFium clash:** the engine was built with `--disable-pdfimport --disable-pdfium` and exports no `FPDF*` symbols.
 
 **Problems found**
-- **Size.** `liblo-native-code.so` is 204 MB stripped (76 MB gzip), and the upstream test APK is 262 MB. A slimming option set is now in `build-engine.sh` (no DB, scripting, Java, avmedia, CoinMP, ZXing, galleries, templates or bundled dictionaries, plus LTO and `-Os`), cross-checked against `configure.ac`. It takes effect on the next engine rebuild.
-- **Process kill on close.** Upstream `LOActivity` kills the app process when a document closes. M4 must host the engine without that, since tabs share our process.
+- **Size.** `liblo-native-code.so` was 204 MB stripped (76 MB gzip), and the upstream test APK 262 MB. Slimming results (x86_64, all stripped):
+
+  | Step | Library | gzip |
+  |---|---|---|
+  | M0 baseline | 204 MB | 76 MB |
+  | Feature disables (DB, scripting, Java, avmedia, CoinMP, ZXing, galleries, templates, dictionaries) | 192 MB | — |
+  | `-Os` passed to make (`.text` 86 → 74 MB) | 180 MB | 67 MB |
+  | RELR relocations (`.rela.dyn` 21 → 0.4 MB) | **158 MB** | **65 MB** |
+
+  LTO is not usable (it adds a GCC-only linker flag that NDK clang rejects). RELR needed a second change: the final library link in `android/Bootstrap/Makefile.shared` ignores `LDFLAGS`, so `build-engine.sh` adds the flag to that line in the build tree. The 33 MB ICU data file is the next candidate (see architecture §10).
+- **Process kill on close.** Confirmed in M4: on Android, closing a document ends LibreOffice's main loop and the process exits (status 0), whether the close comes from `BYE` or from loading the next document. See architecture §10.1.
 - **Offline message.** The front-end briefly showed "The server has been disconnected" while offline, then recovered. To be suppressed in M4.
 - **Test input.** `adb input text` does not reach the WebView's text input; key events do. This affects automated tests only.
 

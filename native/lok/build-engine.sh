@@ -66,5 +66,10 @@ LDFLAGS=-Wl,-z,pack-relative-relocs
 EOF
 
 ./autogen.sh
+# The final liblo-native-code.so link line ignores LDFLAGS, so add RELR there too
+# (in this build tree only; idempotent).
+grep -q pack-relative-relocs android/Bootstrap/Makefile.shared ||
+  sed -i 's|\$(CXX) -Wl,--build-id=sha1|$(CXX) -Wl,-z,pack-relative-relocs -Wl,--build-id=sha1|' \
+    android/Bootstrap/Makefile.shared
 make gb_COMPILEROPTFLAGS=-Os
 echo "engine build for $ABI finished in $WORK"
