@@ -84,3 +84,15 @@ The engine runs in its own `:office` process and draws into the app's tab (archi
   - The first open after install unpacks engine files (about 2.7 s on the emulator).
   - arm64 has no engine build yet: arm64 APKs contain the assets but no engine library.
 - 18 new JVM tests (socket framing, engine messages), written by Gemini 3.8 Flash and reviewed; 64 in total.
+
+## M5: polish (in progress)
+Tested on the phone emulator (Android 16, 1080×2400) unless noted.
+- **Memory pressure and recreation:**
+  - Activity destroyed and recreated ("Don't keep activities"): the Office tab re-attaches with its edit state.
+  - Rotation: re-laid out, edit state kept.
+  - Background memory trim with a hidden dirty Office tab: the tab is checkpointed and its engine process ended; the edit is back when the tab is reopened.
+  - Engine process killed while visible: the app keeps running and shows "The Office engine stopped unexpectedly" with **Reload**, which reopens from the recovery copy.
+- **Fixed:** the engine surface sits above our window, so progress and error messages were hidden under it. The surface now stays transparent while loading and is removed on failure.
+- **Dark mode:** the app and Markdown preview already followed the system theme. Office pages now also switch live (front-end toolbar and document) when the theme changes.
+- **Large files:** 16 MB pptx, 15 MB PDF, 11 MB docx with images (engine process about 334 MB PSS, app about 70 MB), text files over 5 MB (M2). All open and scroll.
+- **CV template:** its "filling in forms only" protection works as in Word (only the fields are editable), and filled fields save with protection intact (52 fields, 74 paragraphs, 3 tables). **Engine gap:** a filled field stays marked "showing placeholder" with the grey placeholder style, so Word may show the typed text greyed out.
