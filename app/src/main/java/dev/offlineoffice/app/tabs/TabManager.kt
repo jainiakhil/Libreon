@@ -242,6 +242,20 @@ class TabManager(
 
     fun dismissRestored(id: String) = _restored.update { it - id }
 
+    /**
+     * Reopens a tab whose engine stopped, from its recovery copy if it has unsaved changes.
+     * Edits made after the last recovery copy are lost with the engine.
+     */
+    fun reload(id: String) {
+        scope.launch {
+            mutex.withLock {
+                if (_tabs.value.none { it.id == id }) return@withLock
+                unload(id)
+                load(currentTab(id))
+            }
+        }
+    }
+
     /** Called from onStop: capture view state and recovery copies for every hot session. */
     fun persistAll() {
         scope.launch {

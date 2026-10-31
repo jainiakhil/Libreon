@@ -165,7 +165,7 @@ class OfficeClient(context: Context) {
     private fun onDeath() {
         died.complete(Unit)
         if (closing) return
-        _state.value = State.Failed("The Office engine stopped unexpectedly. Close this tab and open the document again.")
+        _state.value = State.Failed("The Office engine stopped unexpectedly.")
         saves.values.forEach { it.complete("The Office engine stopped") }
         opened.completeExceptionally(IOException("The Office engine stopped"))
         if (bound) runCatching { app.unbindService(connection) }

@@ -162,7 +162,7 @@ fun AppRoot(
                         )
                     }
                     when (val state = sessions[active.id]) {
-                        is SessionState.Ready -> DocumentHost(state.session, onSave = { if (active.dirty) save(active) })
+                        is SessionState.Ready -> DocumentHost(state.session, onSave = { if (active.dirty) save(active) }, onReload = { tabs.reload(active.id) })
                         is SessionState.Failed -> CenteredMessage("Could not open ${active.displayName}\n${state.message}")
                         else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                     }
