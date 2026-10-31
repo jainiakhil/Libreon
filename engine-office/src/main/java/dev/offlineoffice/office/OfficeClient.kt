@@ -58,6 +58,14 @@ class OfficeClient(context: Context) {
     private val _saveRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val saveRequests: SharedFlow<Unit> = _saveRequests.asSharedFlow()
 
+    /** Writer's live word count line, e.g. "Selected: 3 of 1,204 words, 17 of 6,880 characters". */
+    private val _wordCount = MutableStateFlow<String?>(null)
+    val wordCount: StateFlow<String?> = _wordCount.asStateFlow()
+
+    /** Match counts of [find] with `all` (0: no match). */
+    private val _found = MutableSharedFlow<Int>(extraBufferCapacity = 4)
+    val found: SharedFlow<Int> = _found.asSharedFlow()
+
     private var service: Messenger? = null
     private var binder: IBinder? = null
     private var bound = false
@@ -69,6 +77,7 @@ class OfficeClient(context: Context) {
     private var surfaceView: SurfaceView? = null
     private var nextSaveId = 0
     private val saves = mutableMapOf<Int, CompletableDeferred<String?>>()
+    private val selections = mutableMapOf<Int, CompletableDeferred<String?>>()
 
     private val death = IBinder.DeathRecipient { main.post(::onDeath) }
 
@@ -86,13 +95,14 @@ class OfficeClient(context: Context) {
     }
 
     /** Starts the engine process and begins loading [file], which the engine edits in place. */
-    suspend fun open(file: File, darkTheme: Boolean) = withContext(Dispatchers.Main) {
+    suspend fun open(file: File, darkTheme: Boolean, readOnly: Boolean = false) = withContext(Dispatchers.Main) {
         bound = app.bindService(Intent(app, OfficeService::class.java), connection, Context.BIND_AUTO_CREATE)
         if (!bound) throw IOException("The Office engine could not be started")
         withTimeout(START_TIMEOUT_MS) { connected.await() }
         send(P.OPEN, data = Bundle().apply {
             putString(P.KEY_PATH, file.absolutePath)
             putBoolean(P.KEY_DARK, darkTheme)
+            putBoolean(P.KEY_READ_ONLY, readOnly)
         })
         withTimeout(START_TIMEOUT_MS) { opened.await() }
     }
@@ -133,6 +143,30 @@ class OfficeClient(context: Context) {
         }
     }
 
+    /**
+     * Finds [query] in the document, scrolling to and selecting the next (or previous) match.
+     * With [all], every match is highlighted and the count is reported through [found].
+     */
+    fun find(query: String, backward: Boolean = false, all: Boolean = false) {
+        val flags = (if (backward) P.FIND_BACKWARD else 0) or (if (all) P.FIND_ALL else 0)
+        send(P.FIND, flags, data = Bundle().apply { putString(P.KEY_QUERY, query) })
+    }
+
+    fun clearFind() = send(P.FIND_CLEAR)
+
+    /** The current selection as plain text ("" when nothing is selected). */
+    suspend fun selectedText(): String = withContext(Dispatchers.Main) {
+        val id = ++nextSaveId
+        val result = CompletableDeferred<String?>()
+        selections[id] = result
+        try {
+            send(P.GET_SELECTION, id)
+            withTimeout(SELECTION_TIMEOUT_MS) { result.await() } ?: throw IOException("The selection could not be read")
+        } finally {
+            selections.remove(id)
+        }
+    }
+
     /** Ends the engine process. Unsaved edits in it are lost; checkpoint first. */
     suspend fun close() = withContext(Dispatchers.Main) {
         if (closing) return@withContext
@@ -162,6 +196,9 @@ class OfficeClient(context: Context) {
             P.MODIFIED -> _modified.value = msg.arg1 == 1
             P.SAVE_REQUESTED -> _saveRequests.tryEmit(Unit)
             P.SAVED -> saves[msg.arg1]?.complete(msg.peekData()?.getString(P.KEY_MESSAGE))
+            P.FOUND -> _found.tryEmit(msg.arg1)
+            P.WORD_COUNT -> _wordCount.value = msg.data.getString(P.KEY_MESSAGE)
+            P.SELECTION -> selections[msg.arg1]?.complete(msg.peekData()?.getString(P.KEY_MESSAGE))
         }
     }
 
@@ -170,6 +207,7 @@ class OfficeClient(context: Context) {
         if (closing) return
         _state.value = State.Failed("The Office engine stopped unexpectedly.")
         saves.values.forEach { it.complete("The Office engine stopped") }
+        selections.values.forEach { it.complete(null) }
         opened.completeExceptionally(IOException("The Office engine stopped"))
         if (bound) runCatching { app.unbindService(connection) }
         bound = false
@@ -186,6 +224,7 @@ class OfficeClient(context: Context) {
     private companion object {
         const val START_TIMEOUT_MS = 20_000L
         const val SAVE_TIMEOUT_MS = 130_000L
+        const val SELECTION_TIMEOUT_MS = 15_000L
         const val EXIT_TIMEOUT_MS = 5_000L
     }
 }

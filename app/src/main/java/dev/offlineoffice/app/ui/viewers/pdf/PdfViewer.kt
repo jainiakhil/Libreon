@@ -3,6 +3,7 @@ package dev.offlineoffice.app.ui.viewers.pdf
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculateZoom
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -45,6 +47,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -64,12 +67,16 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import dev.offlineoffice.app.session.PdfSession
+import dev.offlineoffice.app.text.WordCounter
 import dev.offlineoffice.pdf.FormType
 
 /**
@@ -99,6 +106,7 @@ fun PdfViewer(session: PdfSession) {
                 session.currentOffset = offset
             }
     }
+    LaunchedEffect(session) { session.findRequests.collect { state.searchOpen = true } }
     // Tapping a signature field opens the picker for it.
     LaunchedEffect(state) {
         snapshotFlow { state.signatureTarget }.collect { if (it != null) showSignatures = true }
@@ -150,6 +158,14 @@ fun PdfViewer(session: PdfSession) {
             state.tool?.let { tool ->
                 Box(Modifier.align(Alignment.TopCenter).padding(8.dp)) {
                     Notice(tool.hint, action = "Cancel") { state.tool = null }
+                }
+            }
+            state.selection?.let { selection ->
+                Box(Modifier.align(Alignment.TopCenter).padding(8.dp)) { SelectionBar(state, selection) }
+            }
+            state.selectedHighlight?.let {
+                Box(Modifier.align(Alignment.TopCenter).padding(8.dp)) {
+                    Notice("Highlight", action = "Remove", onAction = state::removeSelectedHighlight)
                 }
             }
             Surface(
@@ -284,6 +300,32 @@ private fun SearchBar(state: PdfViewerState) {
         }
     }
 }
+
+/** Actions for selected text: its word count, Copy, and highlight colours. */
+@Suppress("DEPRECATION") // LocalClipboardManager: the replacement LocalClipboard needs ClipData plumbing for a plain string
+@Composable
+private fun SelectionBar(state: PdfViewerState, selection: PdfTextSelection) {
+    val clipboard = LocalClipboardManager.current
+    val words = remember(selection.text) { WordCounter.count(selection.text) }
+    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer, shadowElevation = 4.dp) {
+        Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(if (words == 1) "1 word" else "$words words", Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelLarge)
+            TextButton(onClick = { clipboard.setText(AnnotatedString(selection.text.trim())); state.clearSelection() }) { Text("Copy") }
+            PdfViewerState.HIGHLIGHT_COLORS.forEachIndexed { i, argb ->
+                Box(
+                    Modifier
+                        .minimumInteractiveComponentSize()
+                        .size(28.dp)
+                        .background(Color(argb), CircleShape)
+                        .clickable(onClickLabel = "Highlight in ${HIGHLIGHT_NAMES[i]}", role = Role.Button) { state.highlightSelection(argb) },
+                )
+            }
+            IconButton(onClick = state::clearSelection) { Icon(Icons.Outlined.Close, "Clear selection") }
+        }
+    }
+}
+
+private val HIGHLIGHT_NAMES = listOf("yellow", "green", "blue", "pink")
 
 @Composable
 private fun Notice(text: String, action: String? = null, onAction: () -> Unit = {}) {

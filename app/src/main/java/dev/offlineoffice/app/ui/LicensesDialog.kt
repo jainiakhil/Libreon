@@ -15,6 +15,11 @@ import androidx.compose.ui.unit.dp
 
 /** Keep in sync with docs/licenses.md. */
 private val notices = listOf(
+    "LibreOffice core (LibreOfficeKit), Collabora Online front-end" to
+        "MPL-2.0 (some files MPL-2.0 / LGPL-3.0+); source: libreoffice.org, collaboraonline.github.io",
+    "LibreOffice bundled libraries (ICU, Boost, libxml2, HarfBuzz, cairo, NSS and others)" to
+        "Unicode, BSL-1.0, MIT, MPL-1.1 / LGPL-2.1, MPL-2.0 (each library's own license)",
+    "librevenge, libodfgen, libetonyek, libvisio" to "MPL-2.0 / LGPL-2.1+",
     "PDFium" to "BSD-3-Clause / Apache-2.0 (incl. FreeType FTL, libjpeg-turbo, OpenJPEG BSD-2, lcms2 MIT, zlib)",
     "pdfium-binaries packaging" to "MIT",
     "commonmark-java 0.24.0 (core, GFM tables, strikethrough, task list items)" to "BSD-2-Clause",

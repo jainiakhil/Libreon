@@ -4,6 +4,7 @@ package dev.offlineoffice.app.ui.viewers.pdf
 import android.graphics.Bitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
@@ -36,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
@@ -57,6 +59,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import dev.offlineoffice.pdf.FormField
 import dev.offlineoffice.pdf.FormType
+import dev.offlineoffice.pdf.Highlight
 import kotlin.math.roundToInt
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.collectLatest
@@ -86,6 +89,9 @@ fun PdfPageItem(state: PdfViewerState, index: Int) {
     val fields by produceState(emptyList<FormField>(), index, revision) {
         if (session.formType != FormType.NONE) value = runCatching { session.fields(index) }.getOrDefault(emptyList())
     }
+    val highlights by produceState(emptyList<Highlight>(), index, revision) {
+        value = runCatching { session.highlights(index) }.getOrDefault(emptyList())
+    }
 
     // Visible part of this page in page-box pixels, tracked for the detail render.
     var visible by remember { mutableStateOf<IntArray?>(null) }
@@ -103,11 +109,14 @@ fun PdfPageItem(state: PdfViewerState, index: Int) {
     }
 
     val tap by rememberUpdatedState { offset: Offset ->
-        state.tapPage(index, offset.x / scale, offset.y / scale, fields)
+        state.tapPage(index, offset.x / scale, offset.y / scale, fields, highlights)
     }
     val marks by session.marks.collectAsState()
     val matches = state.searchMatches.filter { it.page == index }
     val current = state.searchMatches.getOrNull(state.searchIndex)
+    val selection = state.selection?.takeIf { it.page == index }
+    val selectedHighlight = state.selectedHighlight?.takeIf { it.page == index }
+    val selectionColor = MaterialTheme.colorScheme.primary
 
     Box(
         Modifier
@@ -120,6 +129,16 @@ fun PdfPageItem(state: PdfViewerState, index: Int) {
                 visible = PdfLayoutMath.detailRegion(b.left - pos.x, b.top - pos.y, b.right - pos.x, b.bottom - pos.y, widthPx, heightPx)
             }
             .pointerInput(index) { detectTapGestures(onTap = { tap(it) }) }
+            // Long press selects a word; dragging on extends the selection.
+            .pointerInput(index, scale) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { state.startSelection(index, it.x / scale, it.y / scale) },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        state.extendSelection(index, change.position.x / scale, change.position.y / scale)
+                    },
+                )
+            }
             .drawWithContent {
                 base?.let {
                     drawImage(it.asImageBitmap(), dstSize = IntSize(widthPx, heightPx), filterQuality = FilterQuality.Low)
@@ -132,6 +151,12 @@ fun PdfPageItem(state: PdfViewerState, index: Int) {
                     for (r in m.rects) {
                         drawRect(color, Offset(r.left * scale, r.top * scale), Size(r.width * scale, r.height * scale))
                     }
+                }
+                selection?.rects?.forEach { r ->
+                    drawRect(selectionColor.copy(alpha = 0.3f), Offset(r.left * scale, r.top * scale), Size(r.width * scale, r.height * scale))
+                }
+                selectedHighlight?.rects?.forEach { r ->
+                    drawRect(selectionColor, Offset(r.left * scale, r.top * scale), Size(r.width * scale, r.height * scale), style = Stroke(2.dp.toPx()))
                 }
                 drawContent()
             },

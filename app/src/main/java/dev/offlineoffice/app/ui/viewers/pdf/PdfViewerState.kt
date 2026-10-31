@@ -19,6 +19,7 @@ import dev.offlineoffice.app.session.MarkGeometry
 import dev.offlineoffice.app.session.PdfMark
 import dev.offlineoffice.app.session.PdfSession
 import dev.offlineoffice.pdf.FormField
+import dev.offlineoffice.pdf.Highlight
 import dev.offlineoffice.pdf.PageRect
 import dev.offlineoffice.pdf.SearchMatch
 import kotlin.math.roundToInt
@@ -38,6 +39,9 @@ class FieldEdit(val field: FormField) {
     var text by mutableStateOf(field.value)
     var committed = false
 }
+
+/** Text selected on one page: characters [start, end), their rectangles and the text itself. */
+data class PdfTextSelection(val page: Int, val start: Int, val end: Int, val rects: List<PageRect>, val text: String)
 
 /** Where a picked signature goes: a signature form field, or the visible part of a page. */
 data class SignatureTarget(val page: Int, val box: PageRect?)
@@ -68,6 +72,13 @@ class PdfViewerState(
     var editing by mutableStateOf<FieldEdit?>(null)
     var choosing by mutableStateOf<FormField?>(null)
     var signatureTarget by mutableStateOf<SignatureTarget?>(null)
+
+    // text selection and highlights
+    var selection by mutableStateOf<PdfTextSelection?>(null)
+        private set
+    var selectedHighlight by mutableStateOf<Highlight?>(null)
+    private var anchor: IntRange? = null
+    private var selectJob: Job? = null
 
     // search
     var searchOpen by mutableStateOf(false)
@@ -139,9 +150,14 @@ class PdfViewerState(
     // --- taps, forms, marks ---
 
     /** A tap at (x, y) display points on [page], with that page's form [fields]. */
-    fun tapPage(page: Int, x: Float, y: Float, fields: List<FormField>) {
+    fun tapPage(page: Int, x: Float, y: Float, fields: List<FormField>, highlights: List<Highlight> = emptyList()) {
         commitEdit()
         choosing = null
+        if (selection != null || selectedHighlight != null) {
+            clearSelection()
+            selectedHighlight = null
+            return
+        }
         tool?.let { t ->
             tool = null
             placeTool(t, page, x, y)
@@ -151,7 +167,11 @@ class PdfViewerState(
             selectedMark = null
             return
         }
-        val field = fields.lastOrNull { it.rect.contains(x, y) && !it.readOnly } ?: return
+        val field = fields.lastOrNull { it.rect.contains(x, y) && !it.readOnly }
+        if (field == null) {
+            selectedHighlight = highlights.lastOrNull { h -> h.rects.any { it.contains(x, y) } }
+            return
+        }
         when (field.type) {
             FormField.Type.TEXT -> editing = FieldEdit(field)
             FormField.Type.CHECKBOX, FormField.Type.RADIO -> scope.launch { session.click(field) }
@@ -247,6 +267,65 @@ class PdfViewerState(
         return cx.coerceIn(0f, size.width) to cy.coerceIn(0f, size.height)
     }
 
+    // --- text selection and highlights ---
+
+    /** Starts a selection at the word under (x, y) on [page] (a long press). */
+    fun startSelection(page: Int, x: Float, y: Float) {
+        commitEdit()
+        selectedHighlight = null
+        selectJob?.cancel()
+        selectJob = scope.launch {
+            val at = session.charIndexAt(page, x, y, SELECT_TOLERANCE_PT)
+            if (at < 0) {
+                onMessage("No selectable text here")
+                return@launch
+            }
+            val word = PdfText.wordAround(session.pageText(page), at)
+            anchor = word
+            select(page, word.first, word.last + 1)
+        }
+    }
+
+    /** Extends the selection to the word under (x, y) while the finger drags. */
+    fun extendSelection(page: Int, x: Float, y: Float) {
+        val from = anchor ?: return
+        if (selection?.page != page) return
+        selectJob?.cancel()
+        selectJob = scope.launch {
+            val at = session.charIndexAt(page, x, y, DRAG_TOLERANCE_PT)
+            if (at < 0) return@launch
+            val word = PdfText.wordAround(session.pageText(page), at)
+            select(page, minOf(from.first, word.first), maxOf(from.last, word.last) + 1)
+        }
+    }
+
+    private suspend fun select(page: Int, start: Int, end: Int) {
+        val text = session.pageText(page)
+        val rects = session.textRects(page, start, end)
+        val s = PdfTextSelection(page, start, end, rects, text.substring(start.coerceIn(0, text.length), end.coerceIn(0, text.length)))
+        selection = s
+        session.selectedText = s.text
+    }
+
+    fun clearSelection() {
+        selectJob?.cancel()
+        anchor = null
+        selection = null
+        session.selectedText = null
+    }
+
+    fun highlightSelection(argb: Int) {
+        val s = selection ?: return
+        clearSelection()
+        scope.launch { if (!session.highlight(s.page, s.start, s.end, argb)) onMessage("Could not highlight that text") }
+    }
+
+    fun removeSelectedHighlight() {
+        val h = selectedHighlight ?: return
+        selectedHighlight = null
+        scope.launch { if (!session.removeHighlight(h)) onMessage("Could not remove the highlight") }
+    }
+
     // --- search ---
 
     fun runSearch() {
@@ -296,6 +375,11 @@ class PdfViewerState(
         const val DEFAULT_FONT_PT = 12f
         const val DEFAULT_SYMBOL_PT = 14f
         const val INK = 0xFF000000.toInt()
+        const val SELECT_TOLERANCE_PT = 6f
+        const val DRAG_TOLERANCE_PT = 14f
+
+        /** Highlight colours offered for selected text (PDFium blends them like a marker). */
+        val HIGHLIGHT_COLORS = listOf(0xFFFFE135.toInt(), 0xFF8BE36B.toInt(), 0xFF6EC6FF.toInt(), 0xFFFF8FB8.toInt())
 
         private val measurePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.SANS_SERIF }
 

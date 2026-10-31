@@ -78,6 +78,47 @@ class PdfDocument private constructor(private var handle: Long) : Closeable {
         return matches
     }
 
+    /** Page [index]'s text; string index = character index used by [charIndexAt] and [textRects]. */
+    fun pageText(index: Int): String = PdfiumNative.pageText(checkOpen(), index)
+
+    /** The character at (x, y) display points, within [tolerance] points; -1 if none. */
+    fun charIndexAt(index: Int, x: Float, y: Float, tolerance: Float = 4f): Int =
+        PdfiumNative.charIndexAt(checkOpen(), index, x, y, tolerance)
+
+    /** Rectangles covering characters [start, end), one per text run. */
+    fun textRects(index: Int, start: Int, end: Int): List<PageRect> =
+        PdfiumNative.textRects(checkOpen(), index, start, end - start).toRects(0)
+
+    /** Adds a /Highlight annotation over [rects] in [argb], recording [text] as its contents. */
+    fun addHighlight(index: Int, rects: List<PageRect>, argb: Int, text: String): Boolean {
+        val flat = FloatArray(rects.size * 4)
+        rects.forEachIndexed { i, r ->
+            flat[i * 4] = r.left; flat[i * 4 + 1] = r.top; flat[i * 4 + 2] = r.right; flat[i * 4 + 3] = r.bottom
+        }
+        return PdfiumNative.addHighlight(checkOpen(), index, flat, argb, text)
+    }
+
+    /** The highlight annotations on page [index]. */
+    fun highlights(index: Int): List<Highlight> {
+        val raw = PdfiumNative.highlights(checkOpen(), index)
+        val out = ArrayList<Highlight>(raw[0].toInt())
+        var p = 1
+        repeat(raw[0].toInt()) {
+            val annot = raw[p].toInt()
+            val argb = (0xFF shl 24) or (raw[p + 1].toInt() shl 16) or (raw[p + 2].toInt() shl 8) or raw[p + 3].toInt()
+            val count = raw[p + 4].toInt()
+            p += 5
+            out += Highlight(index, annot, argb, raw.copyOfRange(p, p + count * 4).toRects(0))
+            p += count * 4
+        }
+        return out
+    }
+
+    fun removeAnnotation(index: Int, annotIndex: Int): Boolean = PdfiumNative.removeAnnot(checkOpen(), index, annotIndex)
+
+    private fun FloatArray.toRects(from: Int): List<PageRect> =
+        (from until size step 4).map { PageRect(this[it], this[it + 1], this[it + 2], this[it + 3]) }
+
     /** Places [bitmap] in [rect]: into the page content, or as a /Stamp annotation. */
     fun insertImage(index: Int, bitmap: Bitmap, rect: PageRect, asAnnotation: Boolean): Boolean =
         PdfiumNative.insertImage(checkOpen(), index, bitmap, rect.left, rect.top, rect.right, rect.bottom, asAnnotation)

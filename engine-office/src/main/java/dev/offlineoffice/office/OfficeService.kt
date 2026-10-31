@@ -42,6 +42,13 @@ class OfficeService : Service() {
             P.DETACH -> detach()
             P.SAVE -> save(msg.arg1)
             P.THEME -> document?.setDarkTheme(msg.arg1 == 1)
+            P.FIND -> document?.find(
+                msg.data.getString(P.KEY_QUERY).orEmpty(),
+                backward = msg.arg1 and P.FIND_BACKWARD != 0,
+                all = msg.arg1 and P.FIND_ALL != 0,
+            )
+            P.FIND_CLEAR -> document?.clearFind()
+            P.GET_SELECTION -> selection(msg.arg1)
         }
     }
 
@@ -61,9 +68,11 @@ class OfficeService : Service() {
         }
         scope.launch { doc.modified.collect { send(P.MODIFIED, arg1 = if (it) 1 else 0) } }
         scope.launch { doc.saveRequests.collect { send(P.SAVE_REQUESTED) } }
+        scope.launch { doc.searchResults.collect { send(P.FOUND, arg1 = it) } }
+        scope.launch { doc.wordCount.collect { if (it != null) send(P.WORD_COUNT, data = messageBundle(it)) } }
         scope.launch {
             try {
-                doc.open(darkTheme = data.getBoolean(P.KEY_DARK))
+                doc.open(darkTheme = data.getBoolean(P.KEY_DARK), readOnly = data.getBoolean(P.KEY_READ_ONLY))
             } catch (e: Exception) {
                 Log.e(TAG, "open", e)
                 send(P.STATE, arg1 = P.STATE_FAILED, data = messageBundle(e.message ?: e.javaClass.simpleName))
@@ -93,6 +102,14 @@ class OfficeService : Service() {
         scope.launch {
             val error = runCatching { doc.save() }.exceptionOrNull()
             send(P.SAVED, arg1 = requestId, data = error?.let { messageBundle(it.message ?: it.javaClass.simpleName) })
+        }
+    }
+
+    private fun selection(requestId: Int) {
+        val doc = document ?: return
+        scope.launch {
+            val text = runCatching { doc.selectedText() }.onFailure { Log.w(TAG, "selection", it) }.getOrNull()
+            send(P.SELECTION, arg1 = requestId, data = text?.let(::messageBundle))
         }
     }
 

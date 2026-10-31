@@ -106,4 +106,30 @@ class EngineMessagesTest {
         assertNull(EngineMessages.parse("pong".toByteArray()))
         assertNull(EngineMessages.parse("foobar: unknown".toByteArray()))
     }
+
+    @Test
+    fun parseWordCountPlainAndJson() {
+        assertEquals(
+            EngineEvent.WordCount("12 words, 60 characters"),
+            EngineMessages.parse("statechanged: .uno:StateWordCount=12 words, 60 characters".toByteArray()),
+        )
+        assertEquals(
+            EngineEvent.WordCount("Selected: 2 of 12 words, 9 of 60 characters"),
+            EngineMessages.parse("""statechanged: {"commandName":".uno:StateWordCount","state":"Selected: 2 of 12 words, 9 of 60 characters"}""".toByteArray()),
+        )
+        assertNull(EngineMessages.parse("statechanged: .uno:StateWordCount=".toByteArray()))
+    }
+
+    @Test
+    fun parseSearchResultsCountsMatches() {
+        val msg = """searchresultselection: {"searchString":"a","highlightAll":"true","searchResultSelection":[{"part":"0","rectangles":"1, 2, 3, 4"},{"part":"0","rectangles":"5, 6, 7, 8"}]}"""
+        assertEquals(EngineEvent.SearchResults(2), EngineMessages.parse(msg.toByteArray()))
+        assertEquals(EngineEvent.SearchNotFound, EngineMessages.parse("searchnotfound: find".toByteArray()))
+    }
+
+    @Test
+    fun parseTextSelectionKeepsWholeMessage() {
+        val text = "word ".repeat(400)
+        assertEquals(EngineEvent.TextSelection(text), EngineMessages.parse("textselectioncontent: $text".toByteArray()))
+    }
 }

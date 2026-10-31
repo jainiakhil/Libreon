@@ -11,6 +11,7 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 unset MSYSTEM
 
 ABI="${1:?usage: build-engine.sh <arm64-v8a|x86_64>}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
 SRC="${CO_SRC:-$HOME/co}"
 SDK=/opt/android-sdk
 NDK_VERSION=28.2.13676358
@@ -70,6 +71,12 @@ EOF
 # (in this build tree only; idempotent).
 grep -q pack-relative-relocs android/Bootstrap/Makefile.shared ||
   sed -i 's|\$(CXX) -Wl,--build-id=sha1|$(CXX) -Wl,-z,pack-relative-relocs -Wl,--build-id=sha1|' \
+    android/Bootstrap/Makefile.shared
+# Apple Pages, Numbers and Keynote import. libetonyek is built but not on the final link
+# line, so add it there too.
+python3 "$HERE/enable-import-filters.py" solenv/bin/native-code.py
+grep -q libetonyek-0.1.a android/Bootstrap/Makefile.shared ||
+  sed -i 's|\$(WHOLELIBS) \$(LIBS)|$(WHOLELIBS) $(LIBS) $(foreach l,libetonyek/src/lib/.libs/libetonyek-0.1.a libetonyek/src/lib/.libs/libetonyek_internal.a,$(BUILDDIR)/workdir/UnpackedTarball/$(l))|' \
     android/Bootstrap/Makefile.shared
 make gb_COMPILEROPTFLAGS=-Os
 echo "engine build for $ABI finished in $WORK"

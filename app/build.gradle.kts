@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -14,7 +16,22 @@ android {
         minSdk = 31
         targetSdk = 36
         versionCode = 1
-        versionName = "0.1.0-m0"
+        versionName = "0.9.0"
+    }
+    // The release key lives outside version control (signing/, git-ignored). Without it,
+    // release builds fall back to the debug key, which is fine for local testing only.
+    val releaseKey = rootDir.resolve("signing/keystore.properties").takeIf { it.isFile }?.let { file ->
+        Properties().apply { file.inputStream().use { load(it) } }
+    }
+    signingConfigs {
+        if (releaseKey != null) {
+            create("release") {
+                storeFile = rootDir.resolve(releaseKey.getProperty("storeFile"))
+                storePassword = releaseKey.getProperty("storePassword")
+                keyAlias = releaseKey.getProperty("keyAlias")
+                keyPassword = releaseKey.getProperty("keyPassword")
+            }
+        }
     }
     buildTypes {
         debug {
@@ -25,7 +42,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
     splits {
@@ -42,7 +59,9 @@ android {
     }
     kotlin { jvmToolchain(17) }
     buildFeatures { compose = true }
-    packaging { jniLibs { useLegacyPackaging = false } }
+    // Compressed native libraries: the engine is ~185 MB raw but ~55 MB compressed, so the
+    // download is less than half the size. Android extracts them once at install.
+    packaging { jniLibs { useLegacyPackaging = true } }
 }
 
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }

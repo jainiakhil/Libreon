@@ -26,4 +26,6 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
     testImplementation(libs.junit)
+    // The platform org.json is a stub on the JVM; tests need a real implementation.
+    testImplementation(libs.org.json)
 }

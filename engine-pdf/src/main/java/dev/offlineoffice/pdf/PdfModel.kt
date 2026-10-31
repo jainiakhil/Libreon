@@ -74,3 +74,6 @@ data class FormField(
 
 /** One search match: the rectangles covering its text (several when it wraps lines). */
 data class SearchMatch(val page: Int, val rects: List<PageRect>)
+
+/** A /Highlight annotation; [annotIndex] identifies it within its page until the next edit. */
+data class Highlight(val page: Int, val annotIndex: Int, val argb: Int, val rects: List<PageRect>)

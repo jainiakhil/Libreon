@@ -15,6 +15,7 @@ import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.offlineoffice.app.data.TabEntity
+import dev.offlineoffice.app.session.DocumentTools
 import dev.offlineoffice.app.session.SaveAdvice
 import dev.offlineoffice.app.tabs.SaveResult
 import dev.offlineoffice.app.tabs.SessionState
@@ -72,7 +75,10 @@ fun AppRoot(
     var confirmClose by remember { mutableStateOf<TabEntity?>(null) }
     var conflictTab by remember { mutableStateOf<TabEntity?>(null) }
     var saveAsNewTab by remember { mutableStateOf<TabEntity?>(null) }
+    var wordCount by remember { mutableStateOf<WordCountRequest?>(null) }
 
+    // A document opened (or switched to) while Home is showing comes to the front.
+    LaunchedEffect(activeId) { showHome = false }
     val active = tabList.firstOrNull { it.id == activeId }?.takeUnless { showHome }
 
     fun select(id: String) {
@@ -93,6 +99,8 @@ fun AppRoot(
     fun save(tab: TabEntity) {
         if (saveAdvice(tab) != null) saveAsNewTab = tab else scope.launch { handleSave(tab, tabs.save(tab.id)) }
     }
+
+    fun tools(tab: TabEntity) = (sessions[tab.id] as? SessionState.Ready)?.session as? DocumentTools
 
     fun requestClose(tab: TabEntity) {
         if (tab.dirty) confirmClose = tab else tabs.close(tab.id)
@@ -120,6 +128,9 @@ fun AppRoot(
                     },
                     actions = {
                         if (active != null) {
+                            IconButton(onClick = { tools(active)?.findRequests?.tryEmit(Unit) }, enabled = tools(active) != null) {
+                                Icon(Icons.Outlined.Search, "Find in document")
+                            }
                             IconButton(onClick = { save(active) }, enabled = active.dirty) { Icon(Icons.Outlined.Save, "Save") }
                         }
                         TabCountChip(count = tabList.size, onClick = { showSwitcher = true })
@@ -128,6 +139,7 @@ fun AppRoot(
                             onOpen = onOpen,
                             onSaveAs = { active?.let { onSaveAs(it.id, it.displayName) } },
                             onClose = { active?.let(::requestClose) },
+                            onWordCount = { active?.let { tab -> tools(tab)?.let { wordCount = WordCountRequest(tab.displayName, it) } } },
                             onLicenses = { showLicenses = true },
                         )
                     },
@@ -234,6 +246,7 @@ fun AppRoot(
             onDismiss = { saveAsNewTab = null },
         )
     }
+    wordCount?.let { WordCountDialog(it, onDismiss = { wordCount = null }) }
     if (showLicenses) LicensesDialog(onDismiss = { showLicenses = false })
 }
 
@@ -250,6 +263,7 @@ private fun OverflowMenu(
     onOpen: () -> Unit,
     onSaveAs: () -> Unit,
     onClose: () -> Unit,
+    onWordCount: () -> Unit,
     onLicenses: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -263,6 +277,7 @@ private fun OverflowMenu(
             )
             if (hasActive) {
                 DropdownMenuItem(text = { Text("Save as…") }, onClick = { expanded = false; onSaveAs() })
+                DropdownMenuItem(text = { Text("Word count") }, onClick = { expanded = false; onWordCount() })
                 DropdownMenuItem(
                     text = { Text("Close tab") },
                     leadingIcon = { Icon(Icons.Outlined.Close, null) },

@@ -73,6 +73,22 @@ internal object PdfiumNative {
 
     @JvmStatic external fun insertPath(handle: Long, index: Int, points: FloatArray, width: Float, color: Int): Boolean
 
+    /** The page's text; string index = PDFium character index. */
+    @JvmStatic external fun pageText(handle: Long, index: Int): String
+
+    /** Character index nearest (x, y) within [tolerance] points, or -1. */
+    @JvmStatic external fun charIndexAt(handle: Long, index: Int, x: Float, y: Float, tolerance: Float): Int
+
+    /** [l, t, r, b, ...] covering [count] characters from [start]. */
+    @JvmStatic external fun textRects(handle: Long, index: Int, start: Int, count: Int): FloatArray
+
+    @JvmStatic external fun addHighlight(handle: Long, index: Int, rects: FloatArray, color: Int, contents: String): Boolean
+
+    /** [count, then per highlight: annotIndex, red, green, blue, rectCount, l, t, r, b, ...]. */
+    @JvmStatic external fun highlights(handle: Long, index: Int): FloatArray
+
+    @JvmStatic external fun removeAnnot(handle: Long, index: Int, annotIndex: Int): Boolean
+
     /** Writes a copy of the document to [fd] (not closed). */
     @JvmStatic external fun save(handle: Long, fd: Int, incremental: Boolean): Boolean
 }

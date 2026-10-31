@@ -106,3 +106,25 @@ Tested on the phone emulator (Android 16, 1080×2400) unless noted.
   - Built with the same slim configuration (`native/lok/build-all.sh arm64-v8a`, about 3 hours in WSL).
   - `liblo-native-code.so` is 160 MB (x86_64: 158 MB). The arm64 release APK is 228 MB uncompressed on disk, the x86_64 one 227 MB.
   - Installed with `--abi arm64-v8a` on the phone emulator (arm64 code runs there through translation): a restored docx tab opened and rendered in about 40 s. A real arm64 phone has not been tried yet.
+
+## M6: everyday features and a public build (in progress)
+Requested after M5: file search, find in documents, word counts, PDF highlights, more formats, an installable release.
+- **File search:** the home screen filters open, recent and closed files by name (every word of the query must match); with no match it offers the system picker's own search. The tab switcher gets a filter from six tabs up. (First draft by Gemini 3.8 Flash, reviewed.)
+- **Find in document**, from a Find button in the app bar for every kind of document:
+  - Text and PDF: the existing find bars.
+  - Office: a new find bar driving the front-end's own search service. Find-all highlights and counts matches; next/previous move the selection. Tested: "1 match" for a word in a docx, scrolled to and selected.
+- **Word count**, from the app bar menu, with document and selection figures:
+  - Text: live in the status line ("Ln, Col · N words · M chars", or "Selected: a of N words").
+  - Word documents: a live line under the page from Writer's own count. With a selection, this engine reports only the selection, so the last document total is kept for the dialog. Selection counts in any Office document come from the engine's plain-text selection.
+  - PDF: the whole document's text layer, and the selected text.
+  - One shared word-counting rule (letters/digits joined by inner apostrophes, hyphens and digit separators; Chinese/Japanese characters count one each), with JVM tests.
+- **PDF text selection and highlights:**
+  - Long-press selects a word, dragging extends it; a bar shows the word count, Copy and four highlight colours.
+  - Highlights are standard /Highlight annotations (quad points, colour, the text as /Contents), so other PDF viewers show them and they survive saving (checked in a saved file) and tab recovery. Tapping one offers Remove.
+  - New PDFium bridge calls: page text, character at a point, text rectangles, add/list/remove highlight annotations.
+- **More formats:**
+  - Apple Pages, Numbers and Keynote open read-only through libetonyek, which the engine already built but did not link. `native/lok/enable-import-filters.py` registers the three filters and the link line gains libetonyek. Tested on BlueStacks with the engine's own sample files: Pages and Numbers open; Keynote is not yet tried (the system file picker labels .key files as PGP keys, so the picker now also offers that type).
+  - Tried and dropped: WordPerfect, Works/Lotus, AbiWord, eBook (FB2 and others) and StarOffice import. They link and register the same way, and Visio (already in Collabora's build) works through the same framework, but these fail to load any document ("loadComponentFromURL returned an empty reference"); finding out why needs an engine build with logging.
+  - Flat ODF (.fodt/.fods/.fodp) opens; more text extensions (code, subtitles, config files) open in the text editor.
+- **Release build:** signed with a private release key kept outside the repository (`signing/`, git-ignored; release builds fall back to the debug key without it). Native libraries are now compressed in the APK.
+- **Fixed:** opening a file from Home now brings its tab to the front (it used to stay on Home).

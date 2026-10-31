@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
+import org.json.JSONObject
 import org.libreoffice.androidlib.COWebViewClient
 import org.libreoffice.androidlib.LOActivity
 
@@ -41,6 +42,7 @@ internal class OfficeDocument(private val context: Context, val file: File) {
 
     private val socket = FakeSocket()
     private val pendingSave = AtomicReference<CompletableDeferred<Boolean>?>(null)
+    private val pendingSelection = AtomicReference<CompletableDeferred<String>?>(null)
     private val saveLock = Mutex()
 
     private val _state = MutableStateFlow<State>(State.Loading)
@@ -53,6 +55,14 @@ internal class OfficeDocument(private val context: Context, val file: File) {
     /** The user pressed Save inside the front-end. */
     private val _saveRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val saveRequests: SharedFlow<Unit> = _saveRequests.asSharedFlow()
+
+    /** Writer's live word count line (null until the engine reports one). */
+    private val _wordCount = MutableStateFlow<String?>(null)
+    val wordCount: StateFlow<String?> = _wordCount.asStateFlow()
+
+    /** Match counts of find-all searches (0 when nothing matched). */
+    private val _searchResults = MutableSharedFlow<Int>(extraBufferCapacity = 4)
+    val searchResults: SharedFlow<Int> = _searchResults.asSharedFlow()
 
     private val bridge = LOActivity(object : LOActivity.Listener {
         override fun onEngineMessage(message: ByteArray) = deliver(message)
@@ -69,7 +79,7 @@ internal class OfficeDocument(private val context: Context, val file: File) {
         }
 
     /** Starts loading. Progress and failures are reported through [state]. */
-    suspend fun open(darkTheme: Boolean) {
+    suspend fun open(darkTheme: Boolean, readOnly: Boolean) {
         this.darkTheme = darkTheme
         OfficeEngine.prepare(context)
         val notebookbar = context.resources.configuration.smallestScreenWidthDp >= 600
@@ -84,7 +94,7 @@ internal class OfficeDocument(private val context: Context, val file: File) {
         val page = Uri.parse(FRONT_END).buildUpon()
             .appendQueryParameter("file_path", fileUrl)
             .appendQueryParameter("lang", "en-US")
-            .appendQueryParameter("permission", "edit")
+            .appendQueryParameter("permission", if (readOnly) "readonly" else "edit")
             .apply { if (notebookbar) appendQueryParameter("userinterfacemode", "notebookbar") }
             .apply { if (darkTheme) appendQueryParameter("darkTheme", "true") }
             .build().toString()
@@ -114,6 +124,31 @@ internal class OfficeDocument(private val context: Context, val file: File) {
         }
     }
 
+    /**
+     * Finds [query] through the front-end's own search (which scrolls to and selects the match).
+     * With [all] every match is highlighted and counted, reported through [searchResults].
+     */
+    fun find(query: String, backward: Boolean, all: Boolean) {
+        val js = "app.searchService.search(${JSONObject.quote(query)}, $backward, '', ${if (all) 1 else 0})"
+        webView.post { webView.evaluateJavascript(js, null) }
+    }
+
+    /** Drops search highlights. */
+    fun clearFind() = webView.post { webView.evaluateJavascript("app.searchService.resetSelection()", null) }
+
+    /** The current selection as plain text ("" when nothing is selected). */
+    suspend fun selectedText(): String {
+        check(_state.value == State.Ready) { "The document is still loading" }
+        val result = CompletableDeferred<String>()
+        pendingSelection.getAndSet(result)?.cancel()
+        try {
+            OfficeEngine.call { bridge.postMobileMessageNative("gettextselection mimetype=text/plain;charset=utf-8") }
+            return withTimeout(SELECTION_TIMEOUT_MS) { result.await() }
+        } finally {
+            pendingSelection.compareAndSet(result, null)
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private fun createWebView(): WebView {
         if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
@@ -138,6 +173,10 @@ internal class OfficeDocument(private val context: Context, val file: File) {
             is EngineEvent.SaveResult -> pendingSave.get()?.complete(event.success)
             EngineEvent.Loaded -> _state.compareAndSet(State.Loading, State.Ready)
             is EngineEvent.LoadFailed -> _state.value = State.Failed("The engine could not open this document (${event.kind})")
+            is EngineEvent.WordCount -> _wordCount.value = event.text
+            is EngineEvent.SearchResults -> _searchResults.tryEmit(event.count)
+            EngineEvent.SearchNotFound -> _searchResults.tryEmit(0)
+            is EngineEvent.TextSelection -> pendingSelection.get()?.complete(event.text)
             null -> Unit
         }
         webView.post { webView.evaluateJavascript("window.socket.doSend();", null) }
@@ -166,6 +205,7 @@ internal class OfficeDocument(private val context: Context, val file: File) {
         const val FRONT_END = "file:///android_asset/dist/cool.html"
         const val USER_NAME = "Me"
         const val SAVE_TIMEOUT_MS = 120_000L
+        const val SELECTION_TIMEOUT_MS = 10_000L
         val BLOCKED = setOf(
             "BYE", "PRINT", "SAVE", "downloadas", "exportfile", "DIM_SCREEN", "LIGHT_SCREEN",
             "MOBILEWIZARD", "HYPERLINK", "EDITMODE", "SLIDESHOW", "hideProgressbar", "REQUESTFILECOPY",

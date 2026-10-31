@@ -58,6 +58,7 @@ import dev.offlineoffice.app.session.TextSession
 import dev.offlineoffice.app.session.TextSession.Mode
 import dev.offlineoffice.app.session.TextSession.Pane
 import dev.offlineoffice.app.text.JsonFormatter
+import dev.offlineoffice.app.text.WordCounter
 import dev.offlineoffice.app.ui.viewers.text.CsvTableView
 import dev.offlineoffice.app.ui.viewers.text.EditorController
 import dev.offlineoffice.app.ui.viewers.text.EditorPane
@@ -83,7 +84,16 @@ import kotlinx.coroutines.withContext
 /** Width from which Markdown can show editor and preview side by side. */
 private val SPLIT_MIN_WIDTH = 840.dp
 
-private data class EditorStats(val line: Int, val column: Int, val lines: Int, val chars: Int)
+private data class EditorStats(
+    val line: Int,
+    val column: Int,
+    val lines: Int,
+    val chars: Int,
+    val words: Int,
+    val selectedWords: Int,
+    val selectedChars: Int,
+    val hasSelection: Boolean = false,
+)
 
 /**
  * The text document area: toolbar, find/replace, the editor (or read-only line list, Markdown
@@ -93,6 +103,7 @@ private data class EditorStats(val line: Int, val column: Int, val lines: Int, v
 @Composable
 fun TextEditorView(session: TextSession) {
     val find = remember(session) { FindState() }
+    LaunchedEffect(session) { session.findRequests.collect { find.visible = true } }
     val controller = remember(session) { EditorController() }
     val listState = remember(session, session.index) { LazyListState(session.firstVisibleLine) }
     val scope = rememberCoroutineScope()
@@ -104,7 +115,7 @@ fun TextEditorView(session: TextSession) {
     val editable = mode == Mode.Editable
     val index = session.index
 
-    val stats by produceState(EditorStats(1, 1, 1, 0), session) {
+    val stats by produceState(EditorStats(1, 1, 1, 0, 0, 0, 0), session) {
         snapshotFlow { session.state.text to session.state.selection }.debounce(150).collectLatest { (snapshot, selection) ->
             value = withContext(Dispatchers.Default) {
                 val cursor = selection.start.coerceIn(0, snapshot.length)
@@ -117,7 +128,16 @@ fun TextEditorView(session: TextSession) {
                         if (i < cursor) { line++; lineStart = i + 1 }
                     }
                 }
-                EditorStats(line, cursor - lineStart + 1, lines, snapshot.length)
+                val words = WordCounter.count(snapshot)
+                val chars = WordCounter.countChars(snapshot)
+                val hasSelection = selection.min < selection.max
+                val (selWords, selChars) = if (hasSelection) {
+                    val sel = snapshot.subSequence(selection.min.coerceIn(0, snapshot.length), selection.max.coerceIn(0, snapshot.length))
+                    WordCounter.count(sel) to WordCounter.countChars(sel)
+                } else {
+                    0 to 0
+                }
+                EditorStats(line, cursor - lineStart + 1, lines, chars, words, selWords, selChars, hasSelection)
             }
         }
     }
@@ -438,7 +458,13 @@ private fun MoreMenu(session: TextSession, canGoToLine: Boolean, onGoToLine: () 
 private fun StatusLine(session: TextSession, stats: EditorStats, readOnlyLines: Int?, onEncoding: () -> Unit) {
     val nf = remember { NumberFormat.getIntegerInstance() }
     val left = when (val mode = session.mode) {
-        Mode.Editable -> "Ln ${nf.format(stats.line)}, Col ${nf.format(stats.column)} · ${nf.format(stats.lines)} lines · ${nf.format(stats.chars)} chars"
+        Mode.Editable -> {
+            if (stats.hasSelection) {
+                "Selected: ${nf.format(stats.selectedWords)} of ${nf.format(stats.words)} words, ${nf.format(stats.selectedChars)} chars"
+            } else {
+                "Ln ${nf.format(stats.line)}, Col ${nf.format(stats.column)} · ${nf.format(stats.words)} words · ${nf.format(stats.chars)} chars"
+            }
+        }
         is Mode.ReadOnly -> (readOnlyLines?.let { "${nf.format(it)} lines · " } ?: "") + formatSize(mode.sizeBytes)
         is Mode.Huge -> formatSize(mode.sizeBytes)
     }

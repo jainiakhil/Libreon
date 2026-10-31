@@ -5,8 +5,11 @@ import android.graphics.Bitmap
 import android.os.ParcelFileDescriptor
 import android.util.LruCache
 import dev.offlineoffice.app.doc.DocumentKind
+import dev.offlineoffice.app.text.WordCounter
 import dev.offlineoffice.pdf.FormField
 import dev.offlineoffice.pdf.FormType
+import dev.offlineoffice.pdf.Highlight
+import dev.offlineoffice.pdf.PageRect
 import dev.offlineoffice.pdf.PageSize
 import dev.offlineoffice.pdf.PdfDocument
 import dev.offlineoffice.pdf.PdfOpenException
@@ -14,6 +17,7 @@ import dev.offlineoffice.pdf.SearchMatch
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,7 +33,7 @@ import org.json.JSONObject
  * descriptor, so nothing (e.g. the TabManager refreshing the working copy after a save) can
  * change the bytes PDFium reads lazily, and incremental saves can always append to them.
  */
-class PdfSession(override val tabId: String) : DocumentSession, SaveAdvice {
+class PdfSession(override val tabId: String) : DocumentSession, SaveAdvice, DocumentTools {
     override val kind = DocumentKind.PDF
 
     private val _dirty = MutableStateFlow(false)
@@ -85,6 +89,8 @@ class PdfSession(override val tabId: String) : DocumentSession, SaveAdvice {
     var currentZoom = 1f
 
     private val fieldCache = HashMap<Int, Pair<Int, List<FormField>>>()
+    private val textCache = HashMap<Int, Pair<Int, String>>()
+    private val highlightCache = HashMap<Int, Pair<Int, List<Highlight>>>()
     private val renderCache = object : LruCache<String, Bitmap>((Runtime.getRuntime().maxMemory() / 8).toInt()) {
         override fun sizeOf(key: String, value: Bitmap) = value.allocationByteCount
     }
@@ -175,6 +181,63 @@ class PdfSession(override val tabId: String) : DocumentSession, SaveAdvice {
         }
     }
 
+    // --- text, selection and highlights ---
+
+    /** Page [index]'s text (string index = character index), cached per revision. */
+    suspend fun pageText(index: Int): String {
+        val rev = _revision.value
+        textCache[index]?.takeIf { it.first == rev }?.let { return it.second }
+        return withContext(thread) { document?.pageText(index).orEmpty() }.also { textCache[index] = rev to it }
+    }
+
+    /** The character under (x, y) display points on page [index], or -1. */
+    suspend fun charIndexAt(index: Int, x: Float, y: Float, tolerance: Float): Int =
+        withContext(thread) { document?.charIndexAt(index, x, y, tolerance) ?: -1 }
+
+    suspend fun textRects(index: Int, start: Int, end: Int): List<PageRect> =
+        if (end <= start) emptyList() else withContext(thread) { document?.textRects(index, start, end) ?: emptyList() }
+
+    /** Highlight annotations on page [index], cached per revision. */
+    suspend fun highlights(index: Int): List<Highlight> {
+        val rev = _revision.value
+        highlightCache[index]?.takeIf { it.first == rev }?.let { return it.second }
+        return withContext(thread) { document?.highlights(index) ?: emptyList() }.also { highlightCache[index] = rev to it }
+    }
+
+    /** Highlights characters [start, end) of page [index] with a /Highlight annotation. */
+    suspend fun highlight(index: Int, start: Int, end: Int, argb: Int): Boolean {
+        val text = pageText(index).let { it.substring(start.coerceIn(0, it.length), end.coerceIn(0, it.length)) }
+        return edit { doc ->
+            val rects = doc.textRects(index, start, end)
+            rects.isNotEmpty() && doc.addHighlight(index, rects, argb, text.trim())
+        }
+    }
+
+    suspend fun removeHighlight(highlight: Highlight): Boolean = edit { it.removeAnnotation(highlight.page, highlight.annotIndex) }
+
+    /** Text the viewer has selected, for the word count. */
+     var selectedText: String? = null
+
+    // --- DocumentTools ---
+
+    override val findRequests = findRequestFlow()
+
+    override suspend fun wordCount(): WordCount {
+        if (document == null) return WordCount(null, null, "Unlock the document to count its words.")
+        var words = 0
+        var chars = 0
+        for (index in pageSizes.indices) {
+            val text = pageText(index)
+            withContext(Dispatchers.Default) {
+                words += WordCounter.count(text)
+                chars += WordCounter.countChars(text)
+            }
+        }
+        val selection = selectedText?.takeIf { it.isNotBlank() }?.let { Count(WordCounter.count(it), WordCounter.countChars(it)) }
+        val note = if (words == 0 && pageSizes.isNotEmpty()) "No text was found: this PDF may be scanned images." else null
+        return WordCount(Count(words, chars), selection, note)
+    }
+
     // --- forms ---
 
     /** Form widgets on page [index], cached per revision. */
@@ -226,6 +289,8 @@ class PdfSession(override val tabId: String) : DocumentSession, SaveAdvice {
         val ok = withContext(thread) { document?.let(block) ?: false }
         if (ok) {
             fieldCache.clear()
+            textCache.clear()
+            highlightCache.clear()
             renderCache.evictAll()
             _revision.update { it + 1 }
             _dirty.value = true

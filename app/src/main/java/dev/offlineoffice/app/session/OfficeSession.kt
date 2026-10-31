@@ -4,6 +4,7 @@ package dev.offlineoffice.app.session
 import android.content.Context
 import android.content.res.Configuration
 import dev.offlineoffice.app.doc.DocumentKind
+import dev.offlineoffice.app.text.WordCounter
 import dev.offlineoffice.office.OfficeClient
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -26,7 +27,7 @@ class OfficeSession(
     override val kind: DocumentKind,
     private val context: Context,
     private val workDir: File,
-) : DocumentSession {
+) : DocumentSession, DocumentTools {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     /** Edited since the last save to the original. The engine's own flag also resets on recovery copies. */
@@ -39,6 +40,14 @@ class OfficeSession(
     lateinit var document: OfficeClient
         private set
 
+    /** Formats the engine can import but not write back (Apple iWork, WordPerfect…) open read-only. */
+    val readOnly: Boolean get() = DocumentKind.isImportOnly(working.name)
+
+    override val findRequests = findRequestFlow()
+
+    /** Writer's last document totals: its line shows only the selection while text is selected. */
+    private var lastTotals: Count? = null
+
     override suspend fun load(file: File, viewState: String?) {
         val ext = file.extension.ifEmpty { kind.extensions.first() }
         working = File(workDir, "document.$ext")
@@ -49,11 +58,26 @@ class OfficeSession(
         }
         document = OfficeClient(context)
         scope.launch { document.modified.collect { if (it) _dirty.value = true } }
+        scope.launch { document.wordCount.collect { line -> line?.let(WriterWordCount::parse)?.let { lastTotals = it } } }
         val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        document.open(working, darkTheme = dark)
+        document.open(working, darkTheme = dark, readOnly = readOnly)
     }
 
     override fun captureViewState(): String? = null
+
+    override suspend fun wordCount(): WordCount {
+        if (document.state.value != OfficeClient.State.Ready) return WordCount(null, null, "The document is still opening.")
+        val selected = runCatching { document.selectedText() }.getOrNull()
+        val selection = selected?.takeIf { it.isNotBlank() }?.let { withContext(Dispatchers.Default) { Count(WordCounter.count(it), WordCounter.countChars(it)) } }
+        val total = if (kind == DocumentKind.WORD) lastTotals else null
+        val note = when {
+            selected == null -> "The selection could not be read."
+            total == null && kind == DocumentKind.WORD -> "Document totals appear once the document has finished laying out."
+            total == null -> "Totals are counted for text documents. Select cells or text to count them."
+            else -> null
+        }
+        return WordCount(total, selection, note)
+    }
 
     override suspend fun writeTo(target: File) {
         // The engine refuses to save an unmodified document; its file is then already current

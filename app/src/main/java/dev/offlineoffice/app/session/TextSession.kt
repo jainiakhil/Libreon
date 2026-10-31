@@ -19,6 +19,7 @@ import dev.offlineoffice.app.text.LineIndex
 import dev.offlineoffice.app.text.SizeClass
 import dev.offlineoffice.app.text.TextCodec
 import dev.offlineoffice.app.text.TextFormat
+import dev.offlineoffice.app.text.WordCounter
 import java.io.File
 import java.io.FileInputStream
 import java.nio.charset.Charset
@@ -43,7 +44,19 @@ import org.json.JSONObject
  * Larger files are never decoded as a whole: they open read-only over a streaming [LineIndex]
  * (the whole file up to 50 MB, a head or tail window beyond that).
  */
-class TextSession(override val tabId: String, override val kind: DocumentKind) : DocumentSession {
+class TextSession(override val tabId: String, override val kind: DocumentKind) : DocumentSession, DocumentTools {
+    override val findRequests = findRequestFlow()
+
+    override suspend fun wordCount(): WordCount {
+        if (mode != Mode.Editable) return WordCount(null, null, "This file is too large to count; only part of it is loaded.")
+        val text = state.text.toString()
+        val sel = state.selection
+        return withContext(Dispatchers.Default) {
+            val selection = if (sel.collapsed) null else text.substring(sel.min, sel.max).let { Count(WordCounter.count(it), WordCounter.countChars(it)) }
+            WordCount(Count(WordCounter.count(text), WordCounter.countChars(text)), selection)
+        }
+    }
+
     /** Whether the file is edited, shown read-only, or waiting for a head/tail choice. */
     sealed interface Mode {
         data object Editable : Mode
