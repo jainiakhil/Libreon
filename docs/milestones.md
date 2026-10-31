@@ -96,3 +96,9 @@ Tested on the phone emulator (Android 16, 1080×2400) unless noted.
 - **Dark mode:** the app and Markdown preview already followed the system theme. Office pages now also switch live (front-end toolbar and document) when the theme changes.
 - **Large files:** 16 MB pptx, 15 MB PDF, 11 MB docx with images (engine process about 334 MB PSS, app about 70 MB), text files over 5 MB (M2). All open and scroll.
 - **CV template:** its "filling in forms only" protection works as in Word (only the fields are editable), and filled fields save with protection intact (52 fields, 74 paragraphs, 3 tables). **Engine gap:** a filled field stays marked "showing placeholder" with the grey placeholder style, so Word may show the typed text greyed out.
+- **Accessibility pass:**
+  - Done by Gemini 3.8 Flash in its own worktree (UI files only), reviewed by Claude.
+  - Buttons, tabs, list rows and toggles now announce their role and state.
+  - The page, mark and signature-pad drawing surfaces have descriptions, and the ink colour dots meet the 48 dp touch target.
+  - Rejected: a label on the Office surface, since it could hide the embedded page's own content from screen readers.
+  - Kept small on purpose: the 22 dp mark resize handles.

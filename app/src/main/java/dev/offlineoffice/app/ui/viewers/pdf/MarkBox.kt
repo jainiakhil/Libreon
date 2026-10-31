@@ -39,6 +39,11 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
@@ -102,14 +107,16 @@ fun MarkBox(state: PdfViewerState, mark: PdfMark, scale: Float, selected: Boolea
                     modifier = Modifier.fillMaxSize().background(Color(0x22448AFF)).focusRequester(focus),
                 )
             } else {
-                Canvas(Modifier.fillMaxSize()) {
+                Canvas(Modifier.fillMaxSize().semantics { contentDescription = mark.text.ifEmpty { "Text mark" } }) {
                     textPaint.color = mark.argb
                     textPaint.textSize = MarkGeometry.fontSizeFor(mark.rect) * scale
                     val baseline = (MarkGeometry.baselineFor(mark.rect) - mark.rect.top) * scale
                     drawIntoCanvas { it.nativeCanvas.drawText(mark.text, 0f, baseline, textPaint) }
                 }
             }
-            is PdfMark.Symbol -> Canvas(Modifier.fillMaxSize()) {
+            is PdfMark.Symbol -> Canvas(Modifier.fillMaxSize().semantics {
+                contentDescription = if (mark.cross) "Cross mark" else "Check mark"
+            }) {
                 val pts = MarkGeometry.symbolPoints(mark.rect, mark.cross)
                 val stroke = MarkGeometry.symbolStroke(mark.rect) * scale
                 var i = 0
@@ -187,7 +194,13 @@ fun MarkBox(state: PdfViewerState, mark: PdfMark, scale: Float, selected: Boolea
             TextButton(onClick = { state.commitMark(current) }) { Text("Done") }
             TextButton(onClick = { state.deleteMark(current) }) { Text("Delete") }
             if (mark is PdfMark.Signature) {
-                TextButton(onClick = { state.updateMark(mark.copy(asAnnotation = !mark.asAnnotation)) }) {
+                TextButton(
+                    onClick = { state.updateMark(mark.copy(asAnnotation = !mark.asAnnotation)) },
+                    modifier = Modifier.semantics {
+                        role = Role.Checkbox
+                        stateDescription = if (mark.asAnnotation) "Checked" else "Not checked"
+                    },
+                ) {
                     Text(if (mark.asAnnotation) "☑ Keep as annotation" else "☐ Keep as annotation")
                 }
             }

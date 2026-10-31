@@ -28,6 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.offlineoffice.app.tabs.OpenOrigin
@@ -56,7 +57,7 @@ fun HomeScreen(tabs: TabManager, onOpen: () -> Unit, onSelectTab: (String) -> Un
             item { SectionHeader("Open tabs") }
             items(open, key = { "tab-" + it.id }) { tab ->
                 ListItem(
-                    modifier = Modifier.clickable { onSelectTab(tab.id) },
+                    modifier = Modifier.clickable(role = Role.Button) { onSelectTab(tab.id) },
                     leadingContent = { Icon(tab.kind.icon, null) },
                     headlineContent = { Text(tab.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     supportingContent = if (tab.dirty) ({ Text("Unsaved changes") }) else null,
@@ -67,7 +68,7 @@ fun HomeScreen(tabs: TabManager, onOpen: () -> Unit, onSelectTab: (String) -> Un
             item { SectionHeader("Recent") }
             items(recents, key = { "recent-" + it.uri }) { recent ->
                 ListItem(
-                    modifier = Modifier.clickable {
+                    modifier = Modifier.clickable(role = Role.Button) {
                         if (!recent.reopenable) {
                             onMessage("Pick ${recent.displayName} again with Open to reopen it")
                             return@clickable
@@ -92,7 +93,7 @@ fun HomeScreen(tabs: TabManager, onOpen: () -> Unit, onSelectTab: (String) -> Un
             item { SectionHeader("Recently closed") }
             items(closed, key = { "closed-" + it.id }) { tab ->
                 ListItem(
-                    modifier = Modifier.clickable {
+                    modifier = Modifier.clickable(role = Role.Button) {
                         scope.launch { if (!tabs.reopen(tab)) onMessage("${tab.displayName} can no longer be opened without picking it again") }
                     },
                     leadingContent = { Icon(tab.kind.icon, null) },

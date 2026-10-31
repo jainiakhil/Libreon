@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -39,6 +40,10 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -70,6 +75,7 @@ fun SignaturePadDialog(initials: Boolean, onDismiss: () -> Unit, onDone: (Signat
                         .aspectRatio(if (initials) 2f else 3f)
                         .background(Color.White, MaterialTheme.shapes.medium)
                         .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium)
+                        .semantics { contentDescription = if (initials) "Initials pad" else "Signature pad" }
                         .onSizeChanged { padSize = it }
                         .pointerInput(Unit) {
                             awaitEachGesture {
@@ -137,10 +143,14 @@ fun SignaturePadDialog(initials: Boolean, onDismiss: () -> Unit, onDone: (Signat
 private fun ColorDot(color: Color, label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier
+            .minimumInteractiveComponentSize()
             .size(32.dp)
             .border(if (selected) 3.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else Color.Gray, CircleShape)
             .padding(5.dp)
             .background(color, CircleShape)
-            .clickable(onClickLabel = label, onClick = onClick),
+            .semantics {
+                stateDescription = if (selected) "Selected" else "Not selected"
+            }
+            .clickable(role = Role.RadioButton, onClickLabel = label, onClick = onClick),
     )
 }

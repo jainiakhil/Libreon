@@ -43,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -117,7 +118,7 @@ private fun Thumbnail(session: PdfSession, index: Int, selected: Boolean, onClic
     val bitmap by produceState<Bitmap?>(null, index) {
         value = runCatching { session.renderPage(index, THUMB_WIDTH_PX) }.getOrNull()
     }
-    Column(Modifier.clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.clickable(role = Role.Button, onClickLabel = "Page ${index + 1}", onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier
                 .fillMaxWidth()

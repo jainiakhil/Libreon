@@ -24,6 +24,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.offlineoffice.app.data.TabEntity
@@ -51,7 +52,7 @@ fun TabSwitcherSheet(
         LazyColumn(Modifier.padding(bottom = 24.dp)) {
             itemsIndexed(tabs, key = { _, t -> t.id }) { index, tab ->
                 ListItem(
-                    modifier = Modifier.padding(horizontal = 8.dp).clickable { onSelect(tab.id) },
+                    modifier = Modifier.padding(horizontal = 8.dp).clickable(role = Role.Button) { onSelect(tab.id) },
                     colors = if (tab.id == activeId) {
                         ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
                     } else {

@@ -42,6 +42,11 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -108,6 +113,7 @@ fun PdfPageItem(state: PdfViewerState, index: Int) {
         Modifier
             .pixelSize(widthPx, heightPx)
             .background(Color.White)
+            .semantics { contentDescription = "Page ${index + 1}" }
             .onGloballyPositioned { c ->
                 val pos = c.positionInRoot()
                 val b = c.boundsInRoot()
@@ -184,6 +190,10 @@ private fun ChoiceMenu(state: PdfViewerState, field: FormField, scale: Float) {
                 DropdownMenuItem(
                     text = { Text((if (option.selected) "✓ " else "") + option.label) },
                     onClick = { state.choose(field, i) },
+                    modifier = Modifier.semantics {
+                        role = if (field.multiSelect) Role.Checkbox else Role.RadioButton
+                        stateDescription = if (option.selected) "Selected" else "Not selected"
+                    },
                 )
             }
             if (field.editableChoice) {

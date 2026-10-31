@@ -46,6 +46,10 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -406,13 +410,21 @@ private fun MoreMenu(session: TextSession, canGoToLine: Boolean, onGoToLine: () 
             )
             DropdownMenuItem(
                 text = { Text("Word wrap") },
-                trailingIcon = { if (session.wrap) Icon(Icons.Outlined.Check, "On") },
+                trailingIcon = { if (session.wrap) Icon(Icons.Outlined.Check, null) },
                 onClick = { session.wrap = !session.wrap; open = false },
+                modifier = Modifier.semantics {
+                    role = Role.Checkbox
+                    stateDescription = if (session.wrap) "On" else "Off"
+                },
             )
             DropdownMenuItem(
                 text = { Text("Monospace font") },
-                trailingIcon = { if (session.monospace) Icon(Icons.Outlined.Check, "On") },
+                trailingIcon = { if (session.monospace) Icon(Icons.Outlined.Check, null) },
                 onClick = { session.monospace = !session.monospace; open = false },
+                modifier = Modifier.semantics {
+                    role = Role.Checkbox
+                    stateDescription = if (session.monospace) "On" else "Off"
+                },
             )
             DropdownMenuItem(text = { Text("Encoding and line endings…") }, onClick = { open = false; onEncoding() })
             if ((session.mode as? Mode.ReadOnly)?.window.let { it == TextSession.Window.HEAD || it == TextSession.Window.TAIL }) {
@@ -438,7 +450,7 @@ private fun StatusLine(session: TextSession, stats: EditorStats, readOnlyLines: 
             }
             Text(
                 session.format.label,
-                Modifier.clickable(onClick = onEncoding).padding(vertical = 2.dp),
+                Modifier.clickable(role = Role.Button, onClickLabel = "Change encoding and line endings", onClick = onEncoding).padding(vertical = 2.dp),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,

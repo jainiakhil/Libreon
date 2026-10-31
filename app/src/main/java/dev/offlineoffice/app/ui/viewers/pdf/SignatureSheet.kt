@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.launch
@@ -157,7 +158,7 @@ fun SignatureSheet(onDismiss: () -> Unit, onPick: (Bitmap, initials: Boolean) ->
 private fun SavedRow(signature: SavedSignature, store: SignatureStore, onPick: () -> Unit, onDelete: () -> Unit) {
     val bitmap by produceState<Bitmap?>(null, signature.id) { value = store.loadBitmap(signature) }
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onPick).padding(vertical = 6.dp),
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Select signature", onClick = onPick).padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.weight(1f).height(64.dp).background(Color.White, MaterialTheme.shapes.small).padding(4.dp)) {
