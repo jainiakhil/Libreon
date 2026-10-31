@@ -270,3 +270,26 @@ Effort assumes one developer working with an agent. These are estimates, not com
 | 5 | minSdk | **31 (Android 12).** Newer platforms are prioritised over older-device reach. |
 | 6 | Signature output | **Flattened into page content by default.** "Keep as annotation" stays available as an option. |
 | — | Test device | BlueStacks (Android 16 "Baklava" instance, x86/x64 with arm64 translation) via adb, alongside the SDK emulator. |
+
+---
+
+## 10. M4 integration design (2026-10-31, from M0 findings)
+
+Collabora's Android glue (`android/lib`, MPL-2.0) was studied: a digest from Gemini with file:line citations, the key claims re-checked by Claude.
+- **Engine lifetime.** LibreOfficeKit initialises once per process and is reused. A second `createCOOLWSD` call closes the current document and serves the next (`androidapp.cpp` guards on `lokInitialized`). Global statics (fake socket fd, file URL, document broker) allow **one live Office document at a time**, which matches §4.3's budget of `office = 1`.
+- **No explicit process kill.** Upstream's activity calls `finishAndRemoveTask()` on close because it assumes it owns the whole task. Inside our single activity a document is closed with the `BYE` message instead, and the engine stays loaded for the next tab.
+- **JNI binding.** The prebuilt `libandroidapp` exports JNI functions bound to the class names `org.libreoffice.androidlib.LOActivity` and `COWebViewClient`. We provide our own small Kotlin bridge classes under those names (plain classes, not Activities) rather than patching native code. Upstream's Java classes are not shipped.
+- **Our `OfficeSession`** owns:
+  - a WebView loading the local front-end (`dist/cool.html`) through the bridge, with all non-local requests refused
+  - the temp working copy (from the TabManager)
+  - the save path (`.uno:Save` to the temp file, then the TabManager's verified SAF write)
+- **Stripped:** the Play rating prompt (`RateAppController`); hyperlinks open nothing (offline); the "server disconnected" offline banner is suppressed.
+- **Size work** (engine `.so`, x86_64):
+
+  | Build | Stripped |
+  |---|---|
+  | M0 baseline | 204 MB |
+  | Unused features removed | 192 MB |
+  | Real `-Os` + compact RELR relocations + API level 31 | in progress |
+
+  ICU locale data is 33 MB of prebuilt `icudt78l.dat`. It can be trimmed later with `icupkg` (dropping whole categories), but only with tests for sorting and line-breaking.

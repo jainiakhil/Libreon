@@ -25,7 +25,9 @@ yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" --licenses >/
 "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" \
   "ndk;$NDK_VERSION" "platforms;android-36" "build-tools;36.0.0" "platform-tools" >/dev/null
 
-WORK="$HOME/engine-$ABI"
+# ENGINE_TAG builds into a separate tree (e.g. ENGINE_TAG=slim -> ~/engine-x86_64-slim),
+# so an experiment never clobbers a working engine.
+WORK="$HOME/engine-$ABI${ENGINE_TAG:+-$ENGINE_TAG}"
 if [ ! -d "$WORK" ]; then
   rsync -a --exclude .git "$SRC/engine/" "$WORK/"
 fi
@@ -35,8 +37,12 @@ cd "$WORK"
 #  - no PDF import / PDFium: we render PDFs with our own PDFium, and two copies would clash
 #  - en-US only for now (more UI languages later, each adds size)
 #  - size: drop features the app does not offer (Base/database, macros, Java, media,
-#    solver, barcodes, galleries/templates, bundled dictionaries) and build with -Os.
-#    The first engine build without these was 204 MB stripped (x86_64).
+#    solver, barcodes, galleries/templates, bundled dictionaries). 204 MB -> 192 MB stripped.
+#  - API level 31 (our minSdk) so the linker may emit compact RELR relocations; .rela.dyn
+#    alone was 21 MB.
+#  - -Os: --with-extra-c*-flags lands early on the command line and gbuild's hard-coded
+#    gb_COMPILEROPTFLAGS (-O2) wins, so -Os is passed to make instead (clean builds only:
+#    gbuild does not rebuild objects when flags change).
 #    Not --enable-lto: for Android it adds GCC's -fuse-linker-plugin, which NDK clang rejects.
 cat > autogen.input <<EOF
 --with-android-ndk=$SDK/ndk/$NDK_VERSION
@@ -54,11 +60,11 @@ cat > autogen.input <<EOF
 --without-galleries
 --without-templates
 --without-myspell-dicts
---with-extra-cc-flags=-Os
---with-extra-cxx-flags=-Os
+--with-android-api-level=31
+LDFLAGS=-Wl,-z,pack-relative-relocs
 --with-parallelism=$(nproc)
 EOF
 
 ./autogen.sh
-make
+make gb_COMPILEROPTFLAGS=-Os
 echo "engine build for $ABI finished in $WORK"
