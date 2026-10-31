@@ -28,5 +28,21 @@ mv "$TMP/assets" "$OUT/assets"
 grep -l 'fill="#3a3a38"' "$OUT/assets/dist/images/dark/"*.svg 2>/dev/null |
   xargs -r sed -i 's/fill="#3a3a38"/fill="#fafafa"/g'
 
+# The page links branding.css for host-specific styles; upstream ships none, so ours goes there.
+#  - Message dialogs (e.g. "Font Disallows Editing") show their text as an inline label: the
+#    label's top border is drawn on every wrapped line, its margin only on the first, and the
+#    message's own line breaks are lost. Lay it out as a block that keeps the breaks.
+cat > "$OUT/assets/dist/branding.css" <<'CSS'
+.mobile-wizard-content > .mobile-wizard.static-label.ui-text {
+  display: block !important;
+  white-space: pre-line !important;
+  line-height: 1.45 !important;
+  margin: 0 !important;
+  padding: 16px 4% !important;
+  border: none !important;
+}
+.mobile-wizard-content > .mobile-wizard.static-label.ui-text:empty { display: none !important; }
+CSS
+
 echo "packaged $AAR"
 du -sh "$OUT/jniLibs/$ABI" "$OUT/assets"
