@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-# Builds the Android launcher icon layers from the Libreon artwork sheet
-# (art/libreon-icons-sheet.png), without redrawing anything: the artwork is cut out
-# of the sheet, separated from its tile background, and centred in Android's
-# adaptive-icon safe zone.
+# Builds the Android launcher icon layers and the in-app logo from the Libreon artwork,
+# without redrawing anything:
+#   - the full-colour art is art/Libreon_HighRes_v1.png (transparent, 4000 px);
+#   - the one-colour themed version is cut from the artwork sheet
+#     (art/libreon-icons-sheet.png).
+# Each is centred in Android's adaptive-icon safe zone.
 #
 #   foreground   the full-colour fox and tiles (transparent around them)
 #   monochrome   the one-colour themed version (alpha only; Android tints it)
@@ -10,15 +12,15 @@
 #
 # Usage (needs Pillow): python3 art/make_icons.py
 import os
-from PIL import Image, ImageChops, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RES = os.path.join(HERE, "..", "app", "src", "main", "res")
 SHEET = Image.open(os.path.join(HERE, "libreon-icons-sheet.png")).convert("RGB")
+ART = Image.open(os.path.join(HERE, "Libreon_HighRes_v1.png")).convert("RGBA")
 
 # Where things are on the sheet (pixels), measured from the artwork.
-PRIMARY_ART = (90, 81, 411, 410)      # fox and tiles inside the primary icon
-TILE_COLOUR = (248, 250, 252)         # the primary icon's tile
+TILE_COLOUR = (248, 250, 252)         # the icon's tile (adaptive background)
 THEMED_TILE = (1246, 601, 1498, 842)  # the light-mode themed icon (192 dp sample)
 THEMED_RADIUS = 46
 
@@ -29,29 +31,8 @@ DENSITIES = {"mdpi": 1, "hdpi": 1.5, "xhdpi": 2, "xxhdpi": 3, "xxxhdpi": 4}
 
 
 def foreground_art():
-    """The primary artwork with its tile background made transparent."""
-    crop = SHEET.crop(PRIMARY_ART)
-    out = Image.new("RGBA", crop.size)
-    src, dst = crop.load(), out.load()
-    bg = TILE_COLOUR
-    for y in range(crop.height):
-        for x in range(crop.width):
-            c = src[x, y]
-            d = max(abs(c[i] - bg[i]) for i in range(3))
-            # The tile has a faint gradient (up to ~8 levels); treat that as background.
-            a = min(1.0, max(0.0, (d - 12) / 40))
-            if a <= 0:
-                dst[x, y] = (0, 0, 0, 0)
-                continue
-            # Undo the blend with the tile so edges stay clean on any background.
-            rgb = tuple(max(0, min(255, round((c[i] - (1 - a) * bg[i]) / a))) for i in range(3))
-            dst[x, y] = rgb + (round(a * 255),)
-    # Drop isolated specks (stray shadow pixels on the sheet); the artwork's outlines are
-    # far thicker than the 5 px opening, which keeps everything attached to it.
-    alpha = out.getchannel("A")
-    solid = alpha.point(lambda v: 255 if v > 0 else 0).filter(ImageFilter.MinFilter(5)).filter(ImageFilter.MaxFilter(9))
-    out.putalpha(ImageChops.multiply(alpha, solid))
-    return out
+    """The full-colour artwork, trimmed to the fox and tiles."""
+    return ART.crop(ART.getbbox())
 
 
 def monochrome_art():
@@ -95,7 +76,8 @@ def main():
     # The artwork alone (transparent around it), for the logo on the app's home screen.
     nodpi = os.path.join(RES, "drawable-nodpi")
     os.makedirs(nodpi, exist_ok=True)
-    layer(fg, 560, 512).crop(layer(fg, 560, 512).getbbox()).save(os.path.join(nodpi, "libreon_logo.png"), optimize=True)
+    logo = layer(fg, 840, 768)
+    logo.crop(logo.getbbox()).save(os.path.join(nodpi, "libreon_logo.png"), optimize=True)
 
     # Play Store icon (512 px, full square; the store applies its own rounding).
     store = Image.new("RGBA", (512, 512), TILE_COLOUR + (255,))

@@ -31,3 +31,7 @@ hs_err_pid*.log
 
 # Local copies of release APKs and checksums (published on GitHub Releases).
 /release/
+
+# Source artwork that is too large for git (kept locally).
+/art/*.psd
+/Libreon_android_icons.png

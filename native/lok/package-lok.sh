@@ -42,6 +42,10 @@ cat > "$OUT/assets/dist/branding.css" <<'CSS'
   border: none !important;
 }
 .mobile-wizard-content > .mobile-wizard.static-label.ui-text:empty { display: none !important; }
+/* The top-left toolbar button: a tick in edit mode (back to reading, kept), but in view mode it
+   closes the document, which in our app leaves a blank page. The app's own Home button and back
+   gesture replace it there. */
+#toolbar-mobile-back.editmode-off { visibility: hidden !important; pointer-events: none !important; }
 CSS
 
 echo "packaged $AAR"

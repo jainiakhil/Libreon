@@ -89,7 +89,7 @@ More detail: [architecture](docs/architecture.md) and [milestones and test resul
 
 ## Status
 
-This is a **beta**. It works well on the devices it was tested on (Android emulator and BlueStacks); real-phone testing is ongoing. Known gaps:
+This is a **beta**. It has been tested on a **Samsung Galaxy S24 Ultra** (Android 17, One UI 9), the Android emulator and BlueStacks. More real-phone testing is ongoing, and [bug reports](../../issues/new?template=bug_report.yml) are very welcome. Known gaps:
 - Printing and exporting Office documents to other formats aren't available yet.
 - Copy and paste inside Office documents stays within that document.
 - Apple iWork files are view-only.

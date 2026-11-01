@@ -240,6 +240,10 @@ internal class OfficeDocument(private val context: Context, val file: File) {
             // The page's own Save button. The app's save (which has the engine save, then writes
             // the original) runs instead, so the message is not passed on.
             "save" -> _saveRequests.tryEmit(Unit)
+            // The page closed its document view (its "close" button is hidden by branding.css,
+            // but this is the safety net). The engine keeps running, so offer Reload rather than
+            // leave a blank page.
+            "BYE" -> _state.value = State.Failed("The document view was closed.")
             "hideProgressbar" -> _state.compareAndSet(State.Loading, State.Ready)
             "EDITMODE" -> editing = message.substringAfter(' ', "").trim() == "on"
             "LIGHT_SCREEN", "DIM_SCREEN" -> webView.post { webView.keepScreenOn = command == "LIGHT_SCREEN" }
