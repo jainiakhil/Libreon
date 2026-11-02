@@ -38,10 +38,6 @@ In the build today: everything in the table below.
 |---|---|---|
 | JUnit 4.13.2 (+ Hamcrest 1.3) | JVM unit tests | EPL-1.0 (Hamcrest: BSD-3-Clause) |
 
-## Analysis tooling (not shipped)
-
-JADX 1.5.6 (Apache-2.0), Apktool 3.0.3 (Apache-2.0), REA 6.8.0 (`rea-agents`), jadx-headless-mcp 0.7.1. Used only for the clean-room study in [findings.md](findings.md); none of their output is in this repository.
-
 ## Compatibility
 
 MPL-2.0 is file-level copyleft and is compatible with combining Apache-2.0, BSD, MIT and similar code in one app ("Larger Work", MPL §3.3). Obligations:
