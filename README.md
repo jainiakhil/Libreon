@@ -11,11 +11,11 @@
 
 You know the drill. You just want to open a Word file on your phone. Instead you get a full-screen ad, a "Go Premium!" pop-up, a nudge to sign in, another ad, a request to "let our AI summarise this for you", and then, finally, the document, with a banner ad stuck over the bottom third of it.
 
-I got tired of that. Every popular Android office app seemed to want my money every two seconds, my data all the time, or my patience for AI features nobody asked for. So I did something about it: I *reverse vibe coded* a clean-room office app that does what those apps do, minus the junk.
+I got tired of that. Every popular Android office app seemed to want my money every two seconds, my data all the time, or my patience for AI features nobody asked for. So I did something about it: I built a clean-room office app that does what those apps do, minus the junk.
 
 **No ads. No payments. No trackers. No AI. No account. It doesn't even need the internet.** It opens your files, lets you edit them, and stays out of your way. You can work freely.
 
-The whole thing was built with two AI coding assistants doing the heavy lifting: **Claude Code (Opus 5.5)** and **Google Antigravity (Gemini 3.8 Flash)**. Yes, it's a little ironic that an app with no AI in it was built with AI. The AI wrote code; it didn't move into the app.
+**About the AI:** I built the Android app with two AI coding assistants, **Claude Code (Opus 5.5)** and **Google Antigravity (Gemini 3.8 Flash)**, while I designed it, reviewed the work and tested it on real phones. The parts that open, edit and save your documents are [LibreOffice](https://www.libreoffice.org/) and [PDFium](https://pdfium.googlesource.com/pdfium/), mature open-source engines written by people over decades. Yes, it's a little ironic that an app with no AI in it was built with AI: the AI wrote code; it didn't move into the app. And with no internet permission and every line of code public, you don't have to take my word for any of it.
 
 "Clean room" means no code, resources or assets were taken from any existing app. Existing apps were only used to understand what features people expect. Everything here is written from scratch or comes from properly licensed open-source projects (listed below).
 
