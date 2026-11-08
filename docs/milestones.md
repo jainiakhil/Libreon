@@ -163,3 +163,6 @@ Requests from the first public posts (GitHub milestone *0.9.5*), all checked on 
 ## 0.9.5-beta.2
 - **"The server encountered a invalid error while parsing the tile command"** after zooming out in some presentations (seen on the S24; reproduced on the emulator with three .ppt files, only intermittently). The engine rejected a tile request made during the front-end's zoom animation. The zoom buttons now jump straight to the new level, and the app drops the engine's tile-rejection error instead of letting the page cover the document with a dialog (the page asks for the tile again).
 - **Office zoom levels:** the middle zoom button shows the zoom (100% = true size, as in the PDF viewer) and opens Fit width, 50%, 100%, 150%, 200% and 400%. The controls wait for the page to finish setting up before they are added.
+
+## 0.9.5-beta.3
+- **Fit width didn't fill the width** in Word documents and presentations: the front-end's fit lands a zoom step low (a Word page at 40% was 901 px wide on a 1081 px screen, while 50% fills it exactly). Fit width now picks the largest zoom step at which the page fits the screen width (Word: 50%; presentations: 40% instead of 20%). Spreadsheets keep the front-end's own fit.

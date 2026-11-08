@@ -348,6 +348,22 @@ internal class OfficeDocument(private val context: Context, val file: File) {
               const map = app.map;
               const zoomTo = (level) => app.zoomControl.zoomTo(
                 Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), level)), undefined, false);
+              // The largest zoom step at which the page fits the screen width. (The front-end's own
+              // fit often lands a step lower.) A spreadsheet has no page width, so it keeps that one.
+              const fitWidth = () => {
+                const doc = app.activeDocument;
+                if (map._docLayer._docType === 'spreadsheet' || !doc.fileSize || !doc.fileSize.pX) {
+                  app.dispatcher.dispatch('fitwidthzoom');
+                  return;
+                }
+                const screen = innerWidth * devicePixelRatio + 1;
+                const current = map.getZoom();
+                let best = map.getMinZoom();
+                for (let z = best; z <= map.getMaxZoom(); z++) {
+                  if (doc.fileSize.pX * doc.getZoomScale(z, current) <= screen) best = z;
+                }
+                zoomTo(best);
+              };
               const box = document.createElement('div');
               box.id = 'libreon-zoom';
               const iconButton = (icon, label, run) => {
@@ -384,7 +400,7 @@ internal class OfficeDocument(private val context: Context, val file: File) {
                 b.addEventListener('click', (e) => { e.preventDefault(); menu.hidden = true; run(); });
                 menu.appendChild(b);
               };
-              item('Fit width', () => app.dispatcher.dispatch('fitwidthzoom'));
+              item('Fit width', fitWidth);
               for (const percent of [50, 100, 150, 200, 400]) {
                 item(percent + '%', () => zoomTo(app.activeDocument.getZoomIndex(percent)));
               }
