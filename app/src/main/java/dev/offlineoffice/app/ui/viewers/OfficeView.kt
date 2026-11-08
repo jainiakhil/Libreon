@@ -51,6 +51,7 @@ import dev.offlineoffice.app.doc.DocumentKind
 import dev.offlineoffice.app.session.OfficeSession
 import dev.offlineoffice.app.ui.LocalDarkTheme
 import dev.offlineoffice.app.ui.LocalFullScreen
+import dev.offlineoffice.app.ui.openExternalLink
 import dev.offlineoffice.office.OfficeClient
 
 /** The engine's page for an Office document, drawn by the engine process into a surface of ours. */
@@ -61,6 +62,8 @@ fun OfficeView(session: OfficeSession, onSave: () -> Unit, onReload: () -> Unit)
     val wordCount by document.wordCount.collectAsState()
     val currentOnSave by rememberUpdatedState(onSave)
     LaunchedEffect(document) { document.saveRequests.collect { currentOnSave() } }
+    val context = LocalContext.current
+    LaunchedEffect(document) { document.linkRequests.collect { openExternalLink(context, it) } }
     val dark = LocalDarkTheme.current
     LaunchedEffect(document, dark) { document.setDarkTheme(dark) }
     var findOpen by rememberSaveable(session) { mutableStateOf(false) }

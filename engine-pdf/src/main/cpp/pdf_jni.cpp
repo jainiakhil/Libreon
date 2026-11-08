@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "fpdf_annot.h"
+#include "fpdf_doc.h"
 #include "fpdf_edit.h"
 #include "fpdf_formfill.h"
 #include "fpdf_ppo.h"
@@ -998,6 +999,107 @@ Java_dev_offlineoffice_pdf_PdfiumNative_annotContents(JNIEnv* env, jclass, jlong
     });
     FPDFPage_CloseAnnot(annot);
     return env->NewString(reinterpret_cast<const jchar*>(text.data()), static_cast<jsize>(text.size()));
+}
+
+// --- links ---
+
+// The link at display point (x, y) on the page: "U<uri>" for a web or mail link, "P<page> <top>"
+// for a link within the document (top in display points of the target page, or -1), or null.
+// Looks at link annotations first, then at URLs and e-mail addresses written in the page's text.
+JNIEXPORT jstring JNICALL
+Java_dev_offlineoffice_pdf_PdfiumNative_linkAt(JNIEnv* env, jclass, jlong handle, jint index, jfloat x, jfloat y) {
+    std::lock_guard<std::mutex> guard(g_lock);
+    Document* d = FromHandle(handle);
+    FPDF_PAGE page;
+    FPDF_TEXTPAGE text = GetTextPage(d, index, &page);
+    if (page == nullptr) return nullptr;
+    double ux, uy;
+    DisplayToUser(page).Map(x, y, &ux, &uy);
+
+    // URIs should be 7-bit ASCII; percent-encode anything else so it is valid for NewStringUTF.
+    auto uriResult = [&](const std::string& uri) -> jstring {
+        if (uri.empty()) return nullptr;
+        std::string out = "U";
+        for (unsigned char ch : uri) {
+            if (ch > 0x20 && ch < 0x7f) {
+                out += static_cast<char>(ch);
+            } else {
+                char hex[4];
+                snprintf(hex, sizeof hex, "%%%02X", ch);
+                out += hex;
+            }
+        }
+        return env->NewStringUTF(out.c_str());
+    };
+    auto pageResult = [&](FPDF_DEST dest) -> jstring {
+        const int target = FPDFDest_GetDestPageIndex(d->doc, dest);
+        if (target < 0) return nullptr;
+        FPDF_BOOL hasX = 0, hasY = 0, hasZoom = 0;
+        FS_FLOAT dx = 0, dy = 0, zoom = 0;
+        double top = -1;
+        if (FPDFDest_GetLocationInPage(dest, &hasX, &hasY, &hasZoom, &dx, &dy, &zoom) && hasY) {
+            FPDF_PAGE targetPage = GetPage(d, target);
+            if (targetPage != nullptr) {
+                double vx, vy;
+                DisplayToUser(targetPage).Unmap(hasX ? dx : 0, dy, &vx, &vy);
+                top = std::max(vy, 0.0);
+            }
+        }
+        char buf[48];
+        snprintf(buf, sizeof buf, "P%d %.1f", target, top);
+        return env->NewStringUTF(buf);
+    };
+
+    FPDF_LINK link = FPDFLink_GetLinkAtPoint(page, ux, uy);
+    if (link != nullptr) {
+        if (FPDF_DEST dest = FPDFLink_GetDest(d->doc, link)) return pageResult(dest);
+        FPDF_ACTION action = FPDFLink_GetAction(link);
+        if (action != nullptr) {
+            switch (FPDFAction_GetType(action)) {
+                case PDFACTION_URI: {
+                    const unsigned long bytes = FPDFAction_GetURIPath(d->doc, action, nullptr, 0);
+                    if (bytes <= 1) return nullptr;
+                    std::string uri(bytes, '\0');
+                    FPDFAction_GetURIPath(d->doc, action, uri.data(), bytes);
+                    uri.resize(bytes - 1);
+                    return uriResult(uri);
+                }
+                case PDFACTION_GOTO:
+                    if (FPDF_DEST dest = FPDFAction_GetDest(d->doc, action)) return pageResult(dest);
+                    return nullptr;
+                default:
+                    return nullptr;  // other documents, files and apps are not opened
+            }
+        }
+    }
+
+    // Plain-text links ("www.example.com", "name@example.com"); PDFium adds http:// or mailto:.
+    if (text == nullptr) return nullptr;
+    FPDF_PAGELINK web = FPDFLink_LoadWebLinks(text);
+    if (web == nullptr) return nullptr;
+    constexpr double kSlop = 2;  // points around each rectangle that still count
+    jstring result = nullptr;
+    const int count = FPDFLink_CountWebLinks(web);
+    for (int i = 0; i < count && result == nullptr; ++i) {
+        const int rects = FPDFLink_CountRects(web, i);
+        for (int k = 0; k < rects; ++k) {
+            double l, t, r, b;
+            if (!FPDFLink_GetRect(web, i, k, &l, &t, &r, &b)) continue;
+            if (ux < std::min(l, r) - kSlop || ux > std::max(l, r) + kSlop ||
+                uy < std::min(b, t) - kSlop || uy > std::max(b, t) + kSlop) continue;
+            const int units = FPDFLink_GetURL(web, i, nullptr, 0);
+            if (units > 1) {
+                // "U" then the URL (units includes the trailing NUL, which "U" displaces).
+                std::vector<unsigned short> buf(static_cast<size_t>(units) + 1, 0);
+                buf[0] = u'U';
+                FPDFLink_GetURL(web, i, buf.data() + 1, units);
+                result = env->NewString(reinterpret_cast<const jchar*>(buf.data()), units);
+            }
+            break;
+        }
+    }
+    FPDFLink_CloseWebLinks(web);
+    return result;
 }
 
 // Removes the annotation at annotIndex.

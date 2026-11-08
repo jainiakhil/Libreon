@@ -224,6 +224,9 @@ class PdfSession(override val tabId: String) : DocumentSession, SaveAdvice, Docu
     suspend fun annotationText(highlight: Highlight): String =
         withContext(thread) { document?.annotationText(highlight.page, highlight.annotIndex).orEmpty() }
 
+    suspend fun linkAt(index: Int, x: Float, y: Float): dev.offlineoffice.pdf.PdfLink? =
+        withContext(thread) { runCatching { document?.linkAt(index, x, y) }.getOrNull() }
+
     // --- annotations ---
 
     /** Adds a freehand drawing of [strokes] ([x, y, ...] display points each) to page [index]. */

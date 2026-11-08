@@ -166,3 +166,7 @@ Requests from the first public posts (GitHub milestone *0.9.5*), all checked on 
 
 ## 0.9.5-beta.3
 - **Fit width didn't fill the width** in Word documents and presentations: the front-end's fit lands a zoom step low (a Word page at 40% was 901 px wide on a 1081 px screen, while 50% fills it exactly). Fit width now picks the largest zoom step at which the page fits the screen width (Word: 50%; presentations: 40% instead of 20%). Spreadsheets keep the front-end's own fit.
+
+## 0.9.5-beta.4
+- **Links in PDFs** open on tap. Link annotations (web, e-mail and in-document "go to page" links) are found with PDFium's `FPDFLink_GetLinkAtPoint`; addresses written as plain text ("www.…", "name@…") are found with `FPDFLink_LoadWebLinks`. Web and e-mail links ask first ("Open link?" / "Write an e-mail?", with Copy), then go to the browser or mail app; links to other files or apps are not followed. Tested on the emulator: a ServiceNow link opened in Chrome, a mailto: link opened Gmail.
+- **Links in Office documents** open in the browser. The front-end's "External link → Open link" calls `window.open`, which does nothing in a WebView; the page now passes web, e-mail and phone links to the app (OPEN_LINK, 111), which hands them to another app. Tested on a .docx: the doi.org link opened in Chrome. Libreon still has no internet permission.

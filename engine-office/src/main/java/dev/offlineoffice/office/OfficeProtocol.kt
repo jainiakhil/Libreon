@@ -43,6 +43,8 @@ internal object OfficeProtocol {
     const val SELECTION = 109
     /** arg1: request id; data: [KEY_MESSAGE] when the export failed. */
     const val EXPORTED = 110
+    /** Data: [KEY_MESSAGE], a web, e-mail or phone link the user chose to open. */
+    const val OPEN_LINK = 111
 
     const val FIND_BACKWARD = 1
     const val FIND_ALL = 2

@@ -22,6 +22,7 @@ import dev.offlineoffice.pdf.AnnotType
 import dev.offlineoffice.pdf.FormField
 import dev.offlineoffice.pdf.Highlight
 import dev.offlineoffice.pdf.PageRect
+import dev.offlineoffice.pdf.PdfLink
 import dev.offlineoffice.pdf.SearchMatch
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
@@ -234,7 +235,9 @@ class PdfViewerState(
         }
         val field = fields.lastOrNull { it.rect.contains(x, y) && !it.readOnly }
         if (field == null) {
-            selectAnnotation(highlights.lastOrNull { h -> h.rects.any { it.contains(x, y) } })
+            val annotation = highlights.lastOrNull { h -> h.rects.any { it.contains(x, y) } }
+            selectAnnotation(annotation)
+            if (annotation == null) scope.launch { openLink(session.linkAt(page, x, y)) }
             return
         }
         when (field.type) {
@@ -243,6 +246,17 @@ class PdfViewerState(
             FormField.Type.COMBO_BOX, FormField.Type.LIST_BOX -> choosing = field
             FormField.Type.SIGNATURE -> signatureTarget = SignatureTarget(page, field.rect)
             else -> Unit
+        }
+    }
+
+    /** A web or e-mail link the user tapped, waiting for them to confirm opening it. */
+    var pendingLink by mutableStateOf<String?>(null)
+
+    private fun openLink(link: PdfLink?) {
+        when (link) {
+            is PdfLink.Web -> pendingLink = link.uri
+            is PdfLink.Page -> if (link.page in session.pageSizes.indices) jumpTo(link.page, link.top ?: 0f)
+            null -> Unit
         }
     }
 

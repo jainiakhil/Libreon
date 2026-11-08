@@ -33,12 +33,14 @@ I got tired of that. Every popular Android office app seemed to want my money ev
 - Find in document (with match counts), zoom buttons and zoom levels (fit width, 50%–400%), and a live word count for Word documents.
 - **Export or share as PDF**, ready for printing (Android's share sheet includes Print).
 - Copy and paste with other apps.
+- Tap a link to open it in your browser or mail app.
 
 **PDF**
 - Smooth viewing with pinch zoom (up to 1600%, or zoomed out to see several pages), preset zoom levels, thumbnails and search.
 - Fill PDF forms, add text, check marks and crosses to flat forms, and **sign** with saved signatures.
 - **Highlight, underline or strike out text** by long-pressing and dragging, and **annotate** with freehand drawing, rectangles, ellipses and sticky notes. These are standard PDF annotations, so other PDF apps see them too.
 - **Page tools:** rotate, move, delete and extract pages, or insert the pages of another PDF.
+- Tap links to open them in your browser or mail app, or to jump to another page of the document.
 - Copy selected text and count its words.
 
 **Text**

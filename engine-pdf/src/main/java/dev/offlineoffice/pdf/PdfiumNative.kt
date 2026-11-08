@@ -90,6 +90,9 @@ internal object PdfiumNative {
 
     @JvmStatic external fun annotContents(handle: Long, index: Int, annotIndex: Int): String?
 
+    /** "U<uri>", "P<page> <top>" or null for the link at display point (x, y). */
+    @JvmStatic external fun linkAt(handle: Long, index: Int, x: Float, y: Float): String?
+
     @JvmStatic external fun removeAnnot(handle: Long, index: Int, annotIndex: Int): Boolean
 
     /** [strokes] = [pointCount, x, y, ..., pointCount, ...] in display points. */

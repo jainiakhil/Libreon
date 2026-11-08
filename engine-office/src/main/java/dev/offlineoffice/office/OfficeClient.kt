@@ -58,6 +58,10 @@ class OfficeClient(context: Context) {
     private val _saveRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val saveRequests: SharedFlow<Unit> = _saveRequests.asSharedFlow()
 
+    /** Links the user chose to open from the document; see [OfficeDocument.linkRequests]. */
+    private val _linkRequests = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val linkRequests: SharedFlow<String> = _linkRequests.asSharedFlow()
+
     /** Writer's live word count line, e.g. "Selected: 3 of 1,204 words, 17 of 6,880 characters". */
     private val _wordCount = MutableStateFlow<String?>(null)
     val wordCount: StateFlow<String?> = _wordCount.asStateFlow()
@@ -210,6 +214,7 @@ class OfficeClient(context: Context) {
             P.SAVE_REQUESTED -> _saveRequests.tryEmit(Unit)
             P.SAVED, P.EXPORTED -> saves[msg.arg1]?.complete(msg.peekData()?.getString(P.KEY_MESSAGE))
             P.FOUND -> _found.tryEmit(msg.arg1)
+            P.OPEN_LINK -> msg.data.getString(P.KEY_MESSAGE)?.let { _linkRequests.tryEmit(it) }
             P.WORD_COUNT -> _wordCount.value = msg.data.getString(P.KEY_MESSAGE)
             P.SELECTION -> selections[msg.arg1]?.complete(msg.peekData()?.getString(P.KEY_MESSAGE))
         }

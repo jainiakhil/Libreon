@@ -97,3 +97,12 @@ enum class AnnotType(val code: Int, val label: String) {
  * have their bounding box.
  */
 data class Highlight(val page: Int, val annotIndex: Int, val type: AnnotType, val argb: Int, val rects: List<PageRect>)
+
+/** A link in a PDF. */
+sealed interface PdfLink {
+    /** A web address, e-mail (mailto:) or other URI. */
+    data class Web(val uri: String) : PdfLink
+
+    /** A place in the same document: [page], and [top] in display points if the link names one. */
+    data class Page(val page: Int, val top: Float?) : PdfLink
+}

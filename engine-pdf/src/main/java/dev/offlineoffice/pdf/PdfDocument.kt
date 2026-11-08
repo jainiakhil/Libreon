@@ -122,6 +122,20 @@ class PdfDocument private constructor(private var handle: Long) : Closeable {
     /** A note's (or any annotation's) text. */
     fun annotationText(index: Int, annotIndex: Int): String = PdfiumNative.annotContents(checkOpen(), index, annotIndex).orEmpty()
 
+    /** The link at display point (x, y) on page [index], or null. */
+    fun linkAt(index: Int, x: Float, y: Float): PdfLink? {
+        val raw = PdfiumNative.linkAt(checkOpen(), index, x, y) ?: return null
+        return when (raw.firstOrNull()) {
+            'U' -> PdfLink.Web(raw.substring(1))
+            'P' -> {
+                val parts = raw.substring(1).split(' ')
+                val page = parts[0].toIntOrNull() ?: return null
+                PdfLink.Page(page, parts.getOrNull(1)?.toFloatOrNull()?.takeIf { it >= 0f })
+            }
+            else -> null
+        }
+    }
+
     fun removeAnnotation(index: Int, annotIndex: Int): Boolean = PdfiumNative.removeAnnot(checkOpen(), index, annotIndex)
 
     /** Adds a freehand drawing; each stroke is [x, y, x, y, ...] in display points. */

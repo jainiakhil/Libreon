@@ -72,6 +72,7 @@ class OfficeService : Service() {
         }
         scope.launch { doc.modified.collect { send(P.MODIFIED, arg1 = if (it) 1 else 0) } }
         scope.launch { doc.saveRequests.collect { send(P.SAVE_REQUESTED) } }
+        scope.launch { doc.linkRequests.collect { send(P.OPEN_LINK, data = messageBundle(it)) } }
         scope.launch { doc.searchResults.collect { send(P.FOUND, arg1 = it) } }
         scope.launch { doc.wordCount.collect { if (it != null) send(P.WORD_COUNT, data = messageBundle(it)) } }
         scope.launch {

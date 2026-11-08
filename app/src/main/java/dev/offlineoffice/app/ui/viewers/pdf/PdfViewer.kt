@@ -87,6 +87,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import dev.offlineoffice.app.session.PdfSession
 import dev.offlineoffice.app.ui.LocalFullScreen
+import dev.offlineoffice.app.ui.openExternalLink
 import dev.offlineoffice.app.text.WordCounter
 import dev.offlineoffice.pdf.AnnotType
 import dev.offlineoffice.pdf.FormType
@@ -213,6 +214,7 @@ fun PdfViewer(session: PdfSession) {
         )
     }
     state.noteDraft?.let { NoteDialog(onAdd = state::addNote, onDismiss = { state.noteDraft = null }) }
+    state.pendingLink?.let { LinkDialog(it, onDismiss = { state.pendingLink = null }) }
     if (showSignatures) {
         SignatureSheet(
             onDismiss = { showSignatures = false; state.signatureTarget = null },
@@ -452,6 +454,39 @@ private fun NoteDialog(onAdd: (String) -> Unit, onDismiss: () -> Unit) {
         },
         confirmButton = { TextButton(onClick = { onAdd(text) }, enabled = text.isNotBlank()) { Text("Add") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/**
+ * Confirms a tapped web or e-mail link before handing it to another app, so a stray tap never
+ * leaves the document and the address can be checked first. Libreon itself never goes online.
+ */
+@Suppress("DEPRECATION") // LocalClipboardManager, as in the selection bar
+@Composable
+private fun LinkDialog(uri: String, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val mail = uri.startsWith("mailto:", ignoreCase = true)
+    val shown = if (mail) uri.substring(7).substringBefore('?') else uri
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (mail) "Write an e-mail?" else "Open link?") },
+        text = { Text(shown, style = MaterialTheme.typography.bodyMedium) },
+        confirmButton = {
+            TextButton(onClick = {
+                onDismiss()
+                openExternalLink(context, uri)
+            }) { Text(if (mail) "Write" else "Open") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = {
+                    clipboard.setText(AnnotatedString(shown))
+                    onDismiss()
+                }) { Text("Copy") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
     )
 }
 

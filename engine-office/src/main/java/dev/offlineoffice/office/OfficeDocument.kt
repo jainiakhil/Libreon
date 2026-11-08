@@ -63,6 +63,13 @@ internal class OfficeDocument(private val context: Context, val file: File) {
     private val _saveRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val saveRequests: SharedFlow<Unit> = _saveRequests.asSharedFlow()
 
+    /**
+     * Web, e-mail and phone links the user chose to open (after the page's own "External link"
+     * confirmation). The app hands them to another app; this process never goes online.
+     */
+    private val _linkRequests = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val linkRequests: SharedFlow<String> = _linkRequests.asSharedFlow()
+
     /** Writer's live word count line (null until the engine reports one). */
     private val _wordCount = MutableStateFlow<String?>(null)
     val wordCount: StateFlow<String?> = _wordCount.asStateFlow()
@@ -158,7 +165,10 @@ internal class OfficeDocument(private val context: Context, val file: File) {
 
     /** The page is ready: adds zoom buttons to its toolbar (styled by branding.css). */
     private fun onReady() {
-        if (_state.compareAndSet(State.Loading, State.Ready)) addZoomButtons()
+        if (_state.compareAndSet(State.Loading, State.Ready)) {
+            addZoomButtons()
+            webView.post { webView.evaluateJavascript(OPEN_LINKS_JS, null) }
+        }
     }
 
     private fun addZoomButtons() = webView.post { webView.evaluateJavascript(ZOOM_BUTTONS_JS, null) }
@@ -305,6 +315,11 @@ internal class OfficeDocument(private val context: Context, val file: File) {
             // leave a blank page.
             "BYE" -> _state.value = State.Failed("The document view was closed.")
             "hideProgressbar" -> onReady()
+            OPEN_LINK -> {
+                val url = message.substringAfter(' ', "").trim()
+                if (LINK_SCHEMES.any { url.startsWith(it, ignoreCase = true) }) _linkRequests.tryEmit(url)
+                return false
+            }
             "EDITMODE" -> editing = message.substringAfter(' ', "").trim() == "on"
             "LIGHT_SCREEN", "DIM_SCREEN" -> webView.post { webView.keepScreenOn = command == "LIGHT_SCREEN" }
             // Not offered yet: printing, export, and opening links (the app is offline).
@@ -335,6 +350,29 @@ internal class OfficeDocument(private val context: Context, val file: File) {
          * tile requests from an in-between zoom, which the engine rejects. Icons follow the page's
          * light or dark theme; branding.css styles them.
          */
+        /** Front-end message (made up by [OPEN_LINKS_JS]) asking to open a link elsewhere. */
+        const val OPEN_LINK = "LIBREON_OPENLINK"
+        val LINK_SCHEMES = listOf("http://", "https://", "mailto:", "tel:")
+
+        /**
+         * The page opens links with window.open, which does nothing in a WebView. Pass web,
+         * e-mail and phone links to the app instead; anything else is left as it was.
+         */
+        val OPEN_LINKS_JS = """
+            (function () {
+              if (window.__libreonLinks) return;
+              window.__libreonLinks = true;
+              const original = window.open;
+              window.open = function (url) {
+                if (typeof url === 'string' && /^(https?:|mailto:|tel:)/i.test(url.trim())) {
+                  window.COOLMessageHandler.postMobileMessage('$OPEN_LINK ' + url.trim());
+                  return null;
+                }
+                return original.apply(window, arguments);
+              };
+            })();
+        """.trimIndent()
+
         val ZOOM_BUTTONS_JS = """
             (function install(attempts) {
               const after = document.getElementById('toolbar-mobile-back');
