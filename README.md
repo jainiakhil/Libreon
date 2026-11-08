@@ -3,6 +3,11 @@
 <h1 align="center">Libreon</h1>
 <p align="center"><b>Work freely.</b><br>A private, fully offline office suite for Android. No ads, no subscriptions, no trackers, no AI.</p>
 
+<p align="center">
+  <a href="https://github.com/jainiakhil/Libreon/releases/latest"><img src="https://img.shields.io/badge/Download-Latest%20APK-2ea44f?style=for-the-badge&logo=android&logoColor=white" alt="Download the latest APK"></a>
+  <br><sub>Under <b>Assets</b>, pick the <code>arm64-v8a</code> APK: it's the one for almost every phone. <a href="#install">Install help</a></sub>
+</p>
+
 <p align="center"><i>Beta: expect rough edges, and please report them.</i></p>
 
 ---
@@ -57,7 +62,7 @@ The only web links in the app are at the bottom of Settings (the GitHub page and
 
 ## Install
 
-1. Download the APK from [Releases](../../releases):
+1. Download the APK from the [latest release](https://github.com/jainiakhil/Libreon/releases/latest) (under **Assets**):
    - `arm64-v8a` for almost every phone and tablet;
    - `x86_64` for emulators and some Chromebooks.
 2. Open it and allow installing from your browser or file manager when Android asks.
