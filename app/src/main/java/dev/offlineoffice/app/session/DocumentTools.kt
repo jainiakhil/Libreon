@@ -14,6 +14,11 @@ interface DocumentTools {
 
 fun findRequestFlow() = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
+/** A session that can write its document, with any unsaved edits, as a PDF. */
+interface PdfExport {
+    suspend fun exportPdf(target: java.io.File)
+}
+
 data class Count(val words: Int, val chars: Int)
 
 /**

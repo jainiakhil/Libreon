@@ -155,6 +155,24 @@ internal class OfficeDocument(private val context: Context, val file: File) {
         }
     }
 
+    /** Zooms the page the way the front-end's own zoom buttons do ([OfficeProtocol.ZOOM_IN] etc.). */
+    fun zoom(step: Int) {
+        val action = when (step) {
+            OfficeProtocol.ZOOM_IN -> "zoomin"
+            OfficeProtocol.ZOOM_OUT -> "zoomout"
+            else -> "fitwidthzoom"
+        }
+        webView.post { webView.evaluateJavascript("app.dispatcher.dispatch('$action')", null) }
+    }
+
+    /** Writes the document as a PDF to [target], leaving the document itself as it is. */
+    suspend fun exportPdf(target: File) {
+        check(_state.value == State.Ready) { "The document is not open" }
+        target.delete()
+        OfficeEngine.call { bridge.saveAs(Uri.fromFile(target).toString(), "pdf", null) }
+        if (target.length() == 0L) throw IOException("The PDF could not be written")
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private fun createWebView(): WebView {
         if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {

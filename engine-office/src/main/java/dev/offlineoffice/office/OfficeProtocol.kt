@@ -20,6 +20,10 @@ internal object OfficeProtocol {
     const val FIND_CLEAR = 8
     /** arg1: request id. */
     const val GET_SELECTION = 9
+    /** arg1: [ZOOM_IN], [ZOOM_OUT] or [ZOOM_FIT]. */
+    const val ZOOM = 10
+    /** Data: [KEY_PATH], the PDF to write; arg1: request id. */
+    const val EXPORT_PDF = 11
 
     // Service to client
     /** arg1: the service's pid. */
@@ -39,9 +43,15 @@ internal object OfficeProtocol {
     const val WORD_COUNT = 108
     /** arg1: request id; data: [KEY_MESSAGE], the selected text (absent on failure). */
     const val SELECTION = 109
+    /** arg1: request id; data: [KEY_MESSAGE] when the export failed. */
+    const val EXPORTED = 110
 
     const val FIND_BACKWARD = 1
     const val FIND_ALL = 2
+
+    const val ZOOM_IN = 1
+    const val ZOOM_OUT = 2
+    const val ZOOM_FIT = 3
 
     const val STATE_LOADING = 0
     const val STATE_READY = 1

@@ -46,6 +46,18 @@ cat > "$OUT/assets/dist/branding.css" <<'CSS'
    closes the document, which in our app leaves a blank page. The app's own Home button and back
    gesture replace it there. */
 #toolbar-mobile-back.editmode-off { visibility: hidden !important; pointer-events: none !important; }
+/* PowerPoint's slide strip (portrait): in a presentation with sections, each section's title bar
+   sits in the strip as a full-width block and wraps the thumbnails onto rows below the visible
+   strip. Keep one row, with a compact section label before each section's slides. */
+#slide-sorter.portrait { white-space: nowrap !important; }
+#slide-sorter.portrait .slide-section-header {
+  display: inline-flex !important; vertical-align: top; align-items: center;
+  width: auto !important; height: 60px !important; max-width: 96px;
+  margin: 0 6px 0 0 !important; white-space: nowrap;
+}
+#slide-sorter.portrait .slide-section-name {
+  height: auto !important; max-width: 72px; overflow: hidden; text-overflow: ellipsis; font-size: 12px;
+}
 CSS
 
 echo "packaged $AAR"

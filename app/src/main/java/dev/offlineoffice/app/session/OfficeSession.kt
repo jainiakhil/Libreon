@@ -28,7 +28,7 @@ class OfficeSession(
     private val workDir: File,
     /** Whether the page should open in the dark theme. */
     private val darkTheme: () -> Boolean,
-) : DocumentSession, DocumentTools {
+) : DocumentSession, DocumentTools, PdfExport {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     /** Edited since the last save to the original. The engine's own flag also resets on recovery copies. */
@@ -84,6 +84,10 @@ class OfficeSession(
         // (as loaded, or as of the engine's last save).
         if (document.modified.value) document.save()
         withContext(Dispatchers.IO) { working.copyTo(target, overwrite = true) }
+    }
+
+    override suspend fun exportPdf(target: File) {
+        document.exportPdf(target)
     }
 
     override fun markSaved() {

@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -125,6 +127,11 @@ fun SettingsScreen(settings: Settings, onLicenses: () -> Unit, onDismiss: () -> 
                     leadingContent = { Icon(Icons.Outlined.BugReport, null) },
                 )
                 CoffeeBanner(onClick = { openInBrowser(context, COFFEE_URL) })
+                Image(
+                    painterResource(R.drawable.libreon_logo),
+                    contentDescription = null,
+                    modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp, bottom = 32.dp).size(120.dp),
+                )
             }
         }
     }

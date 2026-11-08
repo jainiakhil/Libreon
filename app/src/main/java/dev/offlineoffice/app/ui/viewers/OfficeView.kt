@@ -15,8 +15,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.FitScreen
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.ZoomIn
+import androidx.compose.material.icons.outlined.ZoomOut
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -50,6 +53,7 @@ import dev.offlineoffice.app.OfficeApp
 import dev.offlineoffice.app.doc.DocumentKind
 import dev.offlineoffice.app.session.OfficeSession
 import dev.offlineoffice.app.ui.LocalDarkTheme
+import dev.offlineoffice.app.ui.LocalFullScreen
 import dev.offlineoffice.office.OfficeClient
 
 /** The engine's page for an Office document, drawn by the engine process into a surface of ours. */
@@ -127,17 +131,20 @@ fun OfficeView(session: OfficeSession, onSave: () -> Unit, onReload: () -> Unit)
                 OfficeClient.State.Ready -> Unit
             }
         }
-        // Writer reports a live count (and the selection's) as the user types and selects.
-        if (session.kind == DocumentKind.WORD && state == OfficeClient.State.Ready) {
-            wordCount?.let { line ->
-                Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
+        if (state == OfficeClient.State.Ready && !LocalFullScreen.current) {
+            Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
+                Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // Writer reports a live count (and the selection's) as the user types and selects.
                     Text(
-                        line,
-                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        if (session.kind == DocumentKind.WORD) wordCount.orEmpty() else "",
+                        Modifier.weight(1f),
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    IconButton(onClick = document::zoomOut) { Icon(Icons.Outlined.ZoomOut, "Zoom out") }
+                    IconButton(onClick = document::zoomToFit) { Icon(Icons.Outlined.FitScreen, "Fit to width") }
+                    IconButton(onClick = document::zoomIn) { Icon(Icons.Outlined.ZoomIn, "Zoom in") }
                 }
             }
         }

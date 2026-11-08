@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package dev.offlineoffice.app.ui
 
+import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
@@ -11,17 +12,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -42,6 +48,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -49,16 +57,24 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import dev.offlineoffice.app.R
 import dev.offlineoffice.app.data.Settings
 import dev.offlineoffice.app.data.TabEntity
+import dev.offlineoffice.app.doc.DocumentKind
 import dev.offlineoffice.app.session.DocumentTools
 import dev.offlineoffice.app.session.SaveAdvice
 import dev.offlineoffice.app.tabs.SaveResult
@@ -75,6 +91,8 @@ fun AppRoot(
     settings: Settings,
     onOpen: () -> Unit,
     onSaveAs: (tabId: String, suggestedName: String) -> Unit,
+    onShare: (tabId: String, displayName: String, asPdf: Boolean) -> Unit,
+    onExportPdf: (tabId: String, displayName: String) -> Unit,
     onMessage: (String) -> Unit,
 ) {
     val tabList by tabs.tabs.collectAsState()
@@ -107,6 +125,12 @@ fun AppRoot(
     // Back from a document returns to Home; back on Home leaves the app as usual.
     BackHandler(enabled = active != null) { showHome = true }
 
+    // Full-screen reading: the bars go, and back (or the button in the corner) brings them back.
+    var fullScreen by remember { mutableStateOf(false) }
+    if (active == null) fullScreen = false
+    BackHandler(enabled = fullScreen) { fullScreen = false }
+    FullScreenEffect(fullScreen)
+
     fun select(id: String) {
         showHome = false
         tabs.activate(id)
@@ -134,7 +158,7 @@ fun AppRoot(
 
     Scaffold(
         topBar = {
-            Column {
+            if (!fullScreen) Column {
                 TopAppBar(
                     title = {
                         if (active == null) {
@@ -178,6 +202,10 @@ fun AppRoot(
                             onSaveAs = { active?.let { onSaveAs(it.id, it.displayName) } },
                             onClose = { active?.let(::requestClose) },
                             onWordCount = { active?.let { tab -> tools(tab)?.let { wordCount = WordCountRequest(tab.displayName, it) } } },
+                            onShare = { asPdf -> active?.let { onShare(it.id, it.displayName, asPdf) } },
+                            onExportPdf = active?.takeIf { it.kind.engine == DocumentKind.Engine.OFFICE }
+                                ?.let { tab -> { onExportPdf(tab.id, tab.displayName) } },
+                            onFullScreen = { fullScreen = true },
                             onDiscard = active?.takeIf { it.dirty }?.let { tab -> { confirmDiscard = tab } },
                             lightPages = active?.takeIf { dark }?.let { it.id in lightTabs },
                             onLightPages = { light -> active?.let { settings.setLightPages(it.id, light) } },
@@ -223,7 +251,9 @@ fun AppRoot(
                             val light = dark && active.id in lightTabs
                             AppTheme(dark = dark && !light) {
                                 Surface(color = MaterialTheme.colorScheme.background) {
-                                    DocumentHost(state.session, onSave = { if (active.dirty) save(active) }, onReload = { tabs.reload(active.id) })
+                                    CompositionLocalProvider(LocalFullScreen provides fullScreen) {
+                                        DocumentHost(state.session, onSave = { if (active.dirty) save(active) }, onReload = { tabs.reload(active.id) })
+                                    }
                                 }
                             }
                         }
@@ -235,6 +265,19 @@ fun AppRoot(
         }
     }
 
+    if (fullScreen) {
+        // A popup is its own window, so it stays above an Office page's surface.
+        Popup(alignment = Alignment.TopEnd, offset = IntOffset(0, 0)) {
+            Surface(
+                Modifier.padding(12.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.6f),
+                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+            ) {
+                IconButton(onClick = { fullScreen = false }) { Icon(Icons.Outlined.FullscreenExit, "Exit full screen") }
+            }
+        }
+    }
     if (showSwitcher) {
         TabSwitcherSheet(
             tabs = tabList,
@@ -350,6 +393,10 @@ private fun OverflowMenu(
     onSaveAs: () -> Unit,
     onClose: () -> Unit,
     onWordCount: () -> Unit,
+    onShare: (asPdf: Boolean) -> Unit,
+    /** Shown for Office documents. */
+    onExportPdf: (() -> Unit)?,
+    onFullScreen: () -> Unit,
     /** Shown when the document has unsaved changes. */
     onDiscard: (() -> Unit)?,
     /** null hides the item (the app is light); otherwise whether this tab uses light pages. */
@@ -371,6 +418,24 @@ private fun OverflowMenu(
             )
             if (hasActive) {
                 DropdownMenuItem(text = { Text("Save as…") }, onClick = { expanded = false; onSaveAs() })
+                DropdownMenuItem(
+                    text = { Text("Share") },
+                    leadingIcon = { Icon(Icons.Outlined.Share, null) },
+                    onClick = { expanded = false; onShare(false) },
+                )
+                onExportPdf?.let { export ->
+                    DropdownMenuItem(
+                        text = { Text("Share as PDF") },
+                        leadingIcon = { Icon(Icons.Outlined.PictureAsPdf, null) },
+                        onClick = { expanded = false; onShare(true) },
+                    )
+                    DropdownMenuItem(text = { Text("Export as PDF…") }, onClick = { expanded = false; export() })
+                }
+                DropdownMenuItem(
+                    text = { Text("Full screen") },
+                    leadingIcon = { Icon(Icons.Outlined.Fullscreen, null) },
+                    onClick = { expanded = false; onFullScreen() },
+                )
                 DropdownMenuItem(text = { Text("Word count") }, onClick = { expanded = false; onWordCount() })
                 if (lightPages != null) {
                     DropdownMenuItem(
@@ -405,6 +470,24 @@ private fun OverflowMenu(
                 onClick = { expanded = false; onSettings() },
             )
         }
+    }
+}
+
+/** True while a document is shown full screen; viewers hide their own toolbars then. */
+val LocalFullScreen = staticCompositionLocalOf { false }
+
+/** Hides the status and navigation bars while [fullScreen]; a swipe from an edge shows them briefly. */
+@Composable
+private fun FullScreenEffect(fullScreen: Boolean) {
+    val view = LocalView.current
+    DisposableEffect(fullScreen) {
+        val window = (view.context as? Activity)?.window
+        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
+        if (fullScreen) {
+            controller?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller?.hide(WindowInsetsCompat.Type.systemBars())
+        }
+        onDispose { if (fullScreen) controller?.show(WindowInsetsCompat.Type.systemBars()) }
     }
 }
 

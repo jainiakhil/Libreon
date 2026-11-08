@@ -13,10 +13,12 @@ import dev.offlineoffice.app.doc.ExternalChangeException
 import dev.offlineoffice.app.doc.FileAccess
 import dev.offlineoffice.app.session.DocumentSession
 import dev.offlineoffice.app.session.OfficeSession
+import dev.offlineoffice.app.session.PdfExport
 import dev.offlineoffice.app.session.PdfSession
 import dev.offlineoffice.app.session.SessionBudget
 import dev.offlineoffice.app.session.TextSession
 import java.io.File
+import java.io.IOException
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -242,6 +244,19 @@ class TabManager(
             )
         }
         result
+    }
+
+    /**
+     * Writes the open document, with any unsaved edits, to [target] (as a PDF with [asPdf])
+     * without saving it: for sharing and exporting.
+     */
+    suspend fun exportCopy(id: String, target: File, asPdf: Boolean = false) = mutex.withLock {
+        val session = (_sessions.value[id] as? SessionState.Ready)?.session ?: throw IOException("The document is not open")
+        if (asPdf) {
+            (session as? PdfExport ?: throw IOException("This document cannot be exported as PDF")).exportPdf(target)
+        } else {
+            session.writeTo(target)
+        }
     }
 
     /** Saves over the original even though it changed on disk (after the user confirmed). */

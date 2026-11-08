@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copies made for sharing (the cache's share/ folder) are the only files other apps can be given. -->
+<paths>
+    <cache-path name="share" path="share/" />
+</paths>

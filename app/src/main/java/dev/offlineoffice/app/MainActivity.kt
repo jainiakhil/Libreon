@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package dev.offlineoffice.app
 
+import android.content.ClipData
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.activity.SystemBarStyle
 import androidx.activity.ComponentActivity
@@ -15,6 +17,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.core.content.FileProvider
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
 import dev.offlineoffice.app.data.Settings
@@ -23,7 +26,10 @@ import dev.offlineoffice.app.tabs.OpenOrigin
 import dev.offlineoffice.app.tabs.SaveResult
 import dev.offlineoffice.app.ui.AppRoot
 import dev.offlineoffice.app.ui.AppTheme
+import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
@@ -38,6 +44,22 @@ class MainActivity : ComponentActivity() {
         val tabId = pendingSaveAs ?: return@registerForActivityResult
         pendingSaveAs = null
         if (uri != null) lifecycleScope.launch { reportSave(app.tabs.saveAs(tabId, uri)) }
+    }
+
+    /** A PDF exported to the cache, waiting for the user to pick where it goes. */
+    private var pendingExport: File? = null
+    private val createPdf = registerForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        val file = pendingExport ?: return@registerForActivityResult
+        pendingExport = null
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    contentResolver.openOutputStream(uri, "wt")!!.use { out -> file.inputStream().use { it.copyTo(out) } }
+                }
+            }
+            Toast.makeText(this@MainActivity, if (result.isSuccess) "PDF saved" else "Could not save the PDF", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,6 +88,8 @@ class MainActivity : ComponentActivity() {
                     settings = app.settings,
                     onOpen = { openDocuments.launch(DocumentKind.pickerMimeTypes) },
                     onSaveAs = ::launchSaveAs,
+                    onShare = ::share,
+                    onExportPdf = ::exportPdf,
                     onMessage = { Toast.makeText(this, it, Toast.LENGTH_LONG).show() },
                 )
             }
@@ -91,6 +115,45 @@ class MainActivity : ComponentActivity() {
     private fun launchSaveAs(tabId: String, suggestedName: String) {
         pendingSaveAs = tabId
         createDocument.launch(suggestedName)
+    }
+
+    /**
+     * Sends the document, with any unsaved edits (as a PDF with [asPdf]), to another app.
+     * The copy lives in the cache until the next share; the original is not changed.
+     */
+    private fun share(tabId: String, displayName: String, asPdf: Boolean) {
+        lifecycleScope.launch {
+            val name = if (asPdf) displayName.substringBeforeLast('.') + ".pdf" else displayName
+            val dir = File(cacheDir, "share").apply { deleteRecursively(); mkdirs() }
+            val file = File(dir, name)
+            runCatching { app.tabs.exportCopy(tabId, file, asPdf) }.onFailure {
+                Toast.makeText(this@MainActivity, "Could not share: ${it.message}", Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.files", file)
+            val type = if (asPdf) "application/pdf" else MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "application/octet-stream"
+            val send = Intent(Intent.ACTION_SEND).apply {
+                setType(type)
+                putExtra(Intent.EXTRA_STREAM, uri)
+                clipData = ClipData.newRawUri(name, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(send, null))
+        }
+    }
+
+    /** Exports an Office document as a PDF, then asks where to save it. */
+    private fun exportPdf(tabId: String, displayName: String) {
+        lifecycleScope.launch {
+            val dir = File(cacheDir, "export").apply { deleteRecursively(); mkdirs() }
+            val file = File(dir, "export.pdf")
+            runCatching { app.tabs.exportCopy(tabId, file, asPdf = true) }.onFailure {
+                Toast.makeText(this@MainActivity, "Could not export: ${it.message}", Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            pendingExport = file
+            createPdf.launch(displayName.substringBeforeLast('.') + ".pdf")
+        }
     }
 
     private fun handleIntent(intent: Intent?) {

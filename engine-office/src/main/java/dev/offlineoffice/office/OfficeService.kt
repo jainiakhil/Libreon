@@ -52,6 +52,8 @@ class OfficeService : Service() {
             )
             P.FIND_CLEAR -> document?.clearFind()
             P.GET_SELECTION -> selection(msg.arg1)
+            P.ZOOM -> document?.zoom(msg.arg1)
+            P.EXPORT_PDF -> exportPdf(msg.arg1, File(checkNotNull(msg.data.getString(P.KEY_PATH))))
         }
     }
 
@@ -137,6 +139,14 @@ class OfficeService : Service() {
         scope.launch {
             val text = runCatching { doc.selectedText() }.onFailure { Log.w(TAG, "selection", it) }.getOrNull()
             send(P.SELECTION, arg1 = requestId, data = text?.let(::messageBundle))
+        }
+    }
+
+    private fun exportPdf(requestId: Int, target: File) {
+        val doc = document ?: return
+        scope.launch {
+            val error = runCatching { doc.exportPdf(target) }.onFailure { Log.w(TAG, "export", it) }.exceptionOrNull()
+            send(P.EXPORTED, arg1 = requestId, data = error?.let { messageBundle(it.message ?: it.javaClass.simpleName) })
         }
     }
 

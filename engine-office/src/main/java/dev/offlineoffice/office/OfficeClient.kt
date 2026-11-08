@@ -167,6 +167,23 @@ class OfficeClient(context: Context) {
         }
     }
 
+    fun zoomIn() = send(P.ZOOM, P.ZOOM_IN)
+    fun zoomOut() = send(P.ZOOM, P.ZOOM_OUT)
+    fun zoomToFit() = send(P.ZOOM, P.ZOOM_FIT)
+
+    /** Has the engine write the document, with any unsaved edits, as a PDF to [target]. */
+    suspend fun exportPdf(target: File) = withContext(Dispatchers.Main) {
+        val id = ++nextSaveId
+        val result = CompletableDeferred<String?>()
+        saves[id] = result
+        try {
+            send(P.EXPORT_PDF, id, data = Bundle().apply { putString(P.KEY_PATH, target.absolutePath) })
+            withTimeout(SAVE_TIMEOUT_MS) { result.await() }?.let { throw IOException(it) }
+        } finally {
+            saves.remove(id)
+        }
+    }
+
     /** Ends the engine process. Unsaved edits in it are lost; checkpoint first. */
     suspend fun close() = withContext(Dispatchers.Main) {
         if (closing) return@withContext
@@ -195,7 +212,7 @@ class OfficeClient(context: Context) {
             }
             P.MODIFIED -> _modified.value = msg.arg1 == 1
             P.SAVE_REQUESTED -> _saveRequests.tryEmit(Unit)
-            P.SAVED -> saves[msg.arg1]?.complete(msg.peekData()?.getString(P.KEY_MESSAGE))
+            P.SAVED, P.EXPORTED -> saves[msg.arg1]?.complete(msg.peekData()?.getString(P.KEY_MESSAGE))
             P.FOUND -> _found.tryEmit(msg.arg1)
             P.WORD_COUNT -> _wordCount.value = msg.data.getString(P.KEY_MESSAGE)
             P.SELECTION -> selections[msg.arg1]?.complete(msg.peekData()?.getString(P.KEY_MESSAGE))
