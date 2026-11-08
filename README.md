@@ -30,7 +30,7 @@ I got tired of that. Every popular Android office app seemed to want my money ev
 - Open, edit and save Word, Excel and PowerPoint files: `.docx` `.xlsx` `.pptx`, and the older `.doc` `.xls` `.ppt`.
 - OpenDocument (`.odt` `.ods` `.odp`, plus flat `.fodt` `.fods` `.fodp`) and `.rtf`.
 - Apple **Pages, Numbers and Keynote** files open read-only.
-- Find in document (with match counts), zoom buttons, and a live word count for Word documents.
+- Find in document (with match counts), zoom buttons and zoom levels (fit width, 50%–400%), and a live word count for Word documents.
 - **Export or share as PDF**, ready for printing (Android's share sheet includes Print).
 - Copy and paste with other apps.
 

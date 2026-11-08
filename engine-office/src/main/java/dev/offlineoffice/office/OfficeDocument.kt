@@ -234,6 +234,13 @@ internal class OfficeDocument(private val context: Context, val file: File) {
 
     /** Engine to front-end: queue the message and have the page fetch the queue. */
     private fun deliver(message: ByteArray) {
+        // A tile request the engine could not parse (seen while zooming PowerPoint slides) costs
+        // only that tile, which the page asks for again, but the page would cover the document
+        // with an error dialog. Keep it to the log.
+        if (isRejectedTileRequest(message)) {
+            Log.w(TAG, "engine rejected a tile request: ${String(message, 0, minOf(message.size, 120))}")
+            return
+        }
         socket.enqueue(message)
         when (val event = EngineMessages.parse(message)) {
             is EngineEvent.Modified -> _modified.value = event.modified
@@ -267,6 +274,15 @@ internal class OfficeDocument(private val context: Context, val file: File) {
         if (html != null) bridge.paste("text/html", html.toByteArray()) else bridge.paste("text/plain;charset=utf-8", text.toString().toByteArray())
         return true
     }
+
+    private fun isRejectedTileRequest(message: ByteArray): Boolean {
+        if (message.size > 120 || !message.startsWithAscii("error:")) return false
+        val head = String(message)
+        return ("cmd=tile " in head || "cmd=tilecombine " in head) && "kind=invalid" in head
+    }
+
+    private fun ByteArray.startsWithAscii(prefix: String): Boolean =
+        size >= prefix.length && prefix.indices.all { this[it] == prefix[it].code.toByte() }
 
     /** Front-end to engine. Returns true to pass the message on. */
     private fun handleFrontEnd(message: String): Boolean {
@@ -313,34 +329,85 @@ internal class OfficeDocument(private val context: Context, val file: File) {
         )
 
         /**
-         * Zoom out / fit / zoom in buttons in the page's own toolbar, next to its (hidden in view
-         * mode) close button, doing what the front-end's desktop zoom controls do. Icons follow
-         * the page's light or dark theme.
+         * Zoom controls in the page's own toolbar, next to its (hidden in view mode) close button:
+         * zoom out, the zoom level (a menu of fit width and preset levels; 100% is true size) and
+         * zoom in. Zooms jump straight to the new level: the front-end's animated zoom can send
+         * tile requests from an in-between zoom, which the engine rejects. Icons follow the page's
+         * light or dark theme; branding.css styles them.
          */
         val ZOOM_BUTTONS_JS = """
-            (() => {
+            (function install(attempts) {
               const after = document.getElementById('toolbar-mobile-back');
-              if (!after || document.getElementById('libreon-zoom')) return;
+              if (document.getElementById('libreon-zoom')) return;
+              // Right after loading, the toolbar or the document model may not be set up yet.
+              if (!after || !app.activeDocument || !app.zoomControl) {
+                if (attempts > 0) setTimeout(() => install(attempts - 1), 500);
+                return;
+              }
+              try {
+              const map = app.map;
+              const zoomTo = (level) => app.zoomControl.zoomTo(
+                Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), level)), undefined, false);
               const box = document.createElement('div');
               box.id = 'libreon-zoom';
-              for (const [icon, label, action] of [
-                ['lc_zoomout.svg', 'Zoom out', 'zoomout'],
-                ['lc_zoomreset.svg', 'Fit to width', 'fitwidthzoom'],
-                ['lc_zoomin.svg', 'Zoom in', 'zoomin'],
-              ]) {
+              const iconButton = (icon, label, run) => {
                 const button = document.createElement('button');
                 button.className = 'libreon-zoom-btn';
                 button.title = label;
                 button.setAttribute('aria-label', label);
                 const img = document.createElement('img');
                 img.alt = '';
-                app.LOUtil.setImage(img, icon, app.map);
+                app.LOUtil.setImage(img, icon, map);
                 button.appendChild(img);
-                button.addEventListener('click', (e) => { e.preventDefault(); app.dispatcher.dispatch(action); });
-                box.appendChild(button);
+                button.addEventListener('click', (e) => { e.preventDefault(); run(); });
+                return button;
+              };
+
+              const level = document.createElement('button');
+              level.className = 'libreon-zoom-level';
+              level.setAttribute('aria-haspopup', 'menu');
+              const showLevel = () => {
+                level.textContent = app.activeDocument.getZoomPercent() + '%';
+                level.setAttribute('aria-label', 'Zoom ' + level.textContent + '. Choose a zoom level');
+              };
+              map.on('zoomend', showLevel);
+              showLevel();
+
+              const menu = document.createElement('div');
+              menu.id = 'libreon-zoom-menu';
+              menu.setAttribute('role', 'menu');
+              menu.hidden = true;
+              const item = (text, run) => {
+                const b = document.createElement('button');
+                b.setAttribute('role', 'menuitem');
+                b.textContent = text;
+                b.addEventListener('click', (e) => { e.preventDefault(); menu.hidden = true; run(); });
+                menu.appendChild(b);
+              };
+              item('Fit width', () => app.dispatcher.dispatch('fitwidthzoom'));
+              for (const percent of [50, 100, 150, 200, 400]) {
+                item(percent + '%', () => zoomTo(app.activeDocument.getZoomIndex(percent)));
               }
+              level.addEventListener('click', (e) => {
+                e.preventDefault();
+                const r = level.getBoundingClientRect();
+                menu.style.left = r.left + 'px';
+                menu.style.top = (r.bottom + 4) + 'px';
+                menu.hidden = !menu.hidden;
+              });
+              document.addEventListener('pointerdown', (e) => {
+                if (!menu.hidden && !menu.contains(e.target) && !level.contains(e.target)) menu.hidden = true;
+              }, true);
+              document.body.appendChild(menu);
+
+              box.appendChild(iconButton('lc_zoomout.svg', 'Zoom out', () => zoomTo(map.getZoom() - 1)));
+              box.appendChild(level);
+              box.appendChild(iconButton('lc_zoomin.svg', 'Zoom in', () => zoomTo(map.getZoom() + 1)));
               after.after(box);
-            })()
+              } catch (e) {
+                if (attempts > 0) setTimeout(() => install(attempts - 1), 500);
+              }
+            })(40)
         """.trimIndent()
     }
 }

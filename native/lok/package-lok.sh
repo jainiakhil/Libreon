@@ -54,6 +54,24 @@ cat > "$OUT/assets/dist/branding.css" <<'CSS'
 }
 #libreon-zoom .libreon-zoom-btn:active { background: rgba(127, 127, 127, 0.25) !important; }
 #libreon-zoom .libreon-zoom-btn img { width: 24px; height: 24px; }
+#libreon-zoom .libreon-zoom-level {
+  min-width: 52px !important; height: 34px !important; padding: 0 6px !important; margin: 0 !important;
+  border: none !important; background: transparent !important; box-shadow: none !important; border-radius: 6px;
+  color: var(--color-main-text) !important; font-size: 14px !important; font-weight: 600;
+}
+#libreon-zoom .libreon-zoom-level:active { background: rgba(127, 127, 127, 0.25) !important; }
+#libreon-zoom-menu {
+  position: fixed; z-index: 3000; min-width: 120px; padding: 4px 0;
+  background: var(--color-background-lighter); color: var(--color-main-text);
+  border: 1px solid var(--color-border); border-radius: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+#libreon-zoom-menu[hidden] { display: none !important; }
+#libreon-zoom-menu button {
+  display: block !important; width: 100% !important; margin: 0 !important; padding: 10px 16px !important;
+  border: none !important; background: transparent !important; color: inherit !important;
+  text-align: left; font-size: 15px !important; box-shadow: none !important;
+}
+#libreon-zoom-menu button:active { background: rgba(127, 127, 127, 0.25) !important; }
 /* PowerPoint's slide strip (portrait): in a presentation with sections, each section's title bar
    sits in the strip as a full-width block and wraps the thumbnails onto rows below the visible
    strip. Keep one row, with a compact section label before each section's slides. */

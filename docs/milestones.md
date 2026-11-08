@@ -159,3 +159,7 @@ Requests from the first public posts (GitHub milestone *0.9.5*), all checked on 
 - **PDF page tools:** in the Pages grid, long-press to select pages, then rotate, move, extract to a new PDF or delete; Insert adds every page of another PDF. Page edits make the next save a full one.
 - **Fixed:** the PDF page count was read once at open, so it went stale after page edits; opening a document that is already the active tab, from another app while Home shows, now brings it forward; the PDF selection bar scrolls when it doesn't fit.
 - Every item in the ⋮ menu has an icon; the logo also sits at the end of Settings.
+
+## 0.9.5-beta.2
+- **"The server encountered a invalid error while parsing the tile command"** after zooming out in some presentations (seen on the S24; reproduced on the emulator with three .ppt files, only intermittently). The engine rejected a tile request made during the front-end's zoom animation. The zoom buttons now jump straight to the new level, and the app drops the engine's tile-rejection error instead of letting the page cover the document with a dialog (the page asks for the tile again).
+- **Office zoom levels:** the middle zoom button shows the zoom (100% = true size, as in the PDF viewer) and opens Fit width, 50%, 100%, 150%, 200% and 400%. The controls wait for the page to finish setting up before they are added.
