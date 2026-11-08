@@ -66,6 +66,9 @@ class LOActivity internal constructor(private val listener: Listener) {
 
     external fun postUnoCommand(command: String, arguments: String?, notifyWhenFinished: Boolean)
 
+    /** Pastes [data] of [mimeType] (e.g. "text/plain;charset=utf-8") at the cursor. */
+    external fun paste(mimeType: String, data: ByteArray)
+
     private companion object {
         const val TAG = "OfficeBridge"
     }

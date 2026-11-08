@@ -27,7 +27,8 @@ class PdfOpenException(val errorCode: Int) : Exception("PDFium error $errorCode"
  */
 class PdfDocument private constructor(private var handle: Long) : Closeable {
 
-    val pageCount: Int = PdfiumNative.pageCount(handle)
+    /** Read from PDFium each time: page edits change it. */
+    val pageCount: Int get() = PdfiumNative.pageCount(checkOpen())
 
     val formType: FormType = FormType.entries.getOrElse(PdfiumNative.formType(handle)) { FormType.NONE }
 
@@ -89,32 +90,85 @@ class PdfDocument private constructor(private var handle: Long) : Closeable {
     fun textRects(index: Int, start: Int, end: Int): List<PageRect> =
         PdfiumNative.textRects(checkOpen(), index, start, end - start).toRects(0)
 
-    /** Adds a /Highlight annotation over [rects] in [argb], recording [text] as its contents. */
-    fun addHighlight(index: Int, rects: List<PageRect>, argb: Int, text: String): Boolean {
+    /**
+     * Adds text markup of [type] (highlight, underline, squiggly or strike-out) over [rects] in
+     * [argb], recording [text] as its contents.
+     */
+    fun addHighlight(index: Int, rects: List<PageRect>, argb: Int, text: String, type: AnnotType = AnnotType.HIGHLIGHT): Boolean {
         val flat = FloatArray(rects.size * 4)
         rects.forEachIndexed { i, r ->
             flat[i * 4] = r.left; flat[i * 4 + 1] = r.top; flat[i * 4 + 2] = r.right; flat[i * 4 + 3] = r.bottom
         }
-        return PdfiumNative.addHighlight(checkOpen(), index, flat, argb, text)
+        return PdfiumNative.addHighlight(checkOpen(), index, type.code, flat, argb, text)
     }
 
-    /** The highlight annotations on page [index]. */
+    /** The markup annotations (highlights, drawings, shapes, notes…) on page [index]. */
     fun highlights(index: Int): List<Highlight> {
         val raw = PdfiumNative.highlights(checkOpen(), index)
         val out = ArrayList<Highlight>(raw[0].toInt())
         var p = 1
         repeat(raw[0].toInt()) {
             val annot = raw[p].toInt()
-            val argb = (0xFF shl 24) or (raw[p + 1].toInt() shl 16) or (raw[p + 2].toInt() shl 8) or raw[p + 3].toInt()
-            val count = raw[p + 4].toInt()
-            p += 5
-            out += Highlight(index, annot, argb, raw.copyOfRange(p, p + count * 4).toRects(0))
+            val type = AnnotType.of(raw[p + 1].toInt())
+            val argb = (0xFF shl 24) or (raw[p + 2].toInt() shl 16) or (raw[p + 3].toInt() shl 8) or raw[p + 4].toInt()
+            val count = raw[p + 5].toInt()
+            p += 6
+            if (type != null) out += Highlight(index, annot, type, argb, raw.copyOfRange(p, p + count * 4).toRects(0))
             p += count * 4
         }
         return out
     }
 
+    /** A note's (or any annotation's) text. */
+    fun annotationText(index: Int, annotIndex: Int): String = PdfiumNative.annotContents(checkOpen(), index, annotIndex).orEmpty()
+
     fun removeAnnotation(index: Int, annotIndex: Int): Boolean = PdfiumNative.removeAnnot(checkOpen(), index, annotIndex)
+
+    /** Adds a freehand drawing; each stroke is [x, y, x, y, ...] in display points. */
+    fun addInk(index: Int, strokes: List<FloatArray>, argb: Int, width: Float): Boolean {
+        val flat = ArrayList<Float>()
+        for (s in strokes) {
+            if (s.size < 2) continue
+            flat += (s.size / 2).toFloat()
+            s.forEach { flat += it }
+        }
+        return flat.isNotEmpty() && PdfiumNative.addInk(checkOpen(), index, flat.toFloatArray(), argb, width)
+    }
+
+    /** Outlines [rect] with a rectangle or, with [ellipse], an ellipse. */
+    fun addShape(index: Int, rect: PageRect, ellipse: Boolean, argb: Int, width: Float): Boolean = PdfiumNative.addShape(
+        checkOpen(), index, if (ellipse) AnnotType.CIRCLE.code else AnnotType.SQUARE.code,
+        rect.left, rect.top, rect.right, rect.bottom, argb, width,
+    )
+
+    /** Adds a sticky note with [text], its icon at ([x], [y]). */
+    fun addNote(index: Int, x: Float, y: Float, text: String, argb: Int): Boolean =
+        PdfiumNative.addNote(checkOpen(), index, x, y, text, argb)
+
+    // --- pages ---
+
+    fun deletePages(indices: List<Int>): Boolean = PdfiumNative.deletePages(checkOpen(), indices.toIntArray())
+
+    /** Turns pages clockwise by [quarterTurns] x 90 degrees. */
+    fun rotatePages(indices: List<Int>, quarterTurns: Int): Boolean = PdfiumNative.rotatePages(checkOpen(), indices.toIntArray(), quarterTurns)
+
+    /** Moves [indices] (in that order) so the first lands at [destIndex] of the result. */
+    fun movePages(indices: List<Int>, destIndex: Int): Boolean = PdfiumNative.movePages(checkOpen(), indices.toIntArray(), destIndex)
+
+    /** Inserts all pages of the PDF in [source] before page [insertAt]; returns how many. */
+    fun importPages(source: ParcelFileDescriptor, insertAt: Int): Int {
+        val result = PdfiumNative.importPages(checkOpen(), source.fd, source.statSize, insertAt)
+        if (result < 0) throw PdfOpenException(-result)
+        return result
+    }
+
+    /** Writes a new PDF of the pages at [indices] to [target]. */
+    fun extractPages(indices: List<Int>, target: File) {
+        val mode = ParcelFileDescriptor.MODE_WRITE_ONLY or ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_TRUNCATE
+        ParcelFileDescriptor.open(target, mode).use { pfd ->
+            check(PdfiumNative.extractPages(checkOpen(), indices.toIntArray(), pfd.fd)) { "PDFium could not write the pages" }
+        }
+    }
 
     private fun FloatArray.toRects(from: Int): List<PageRect> =
         (from until size step 4).map { PageRect(this[it], this[it + 1], this[it + 2], this[it + 3]) }

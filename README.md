@@ -25,12 +25,15 @@ I got tired of that. Every popular Android office app seemed to want my money ev
 - Open, edit and save Word, Excel and PowerPoint files: `.docx` `.xlsx` `.pptx`, and the older `.doc` `.xls` `.ppt`.
 - OpenDocument (`.odt` `.ods` `.odp`, plus flat `.fodt` `.fods` `.fodp`) and `.rtf`.
 - Apple **Pages, Numbers and Keynote** files open read-only.
-- Find in document (with match counts), and a live word count for Word documents.
+- Find in document (with match counts), zoom buttons, and a live word count for Word documents.
+- **Export or share as PDF**, ready for printing (Android's share sheet includes Print).
+- Copy and paste with other apps.
 
 **PDF**
-- Smooth viewing with pinch zoom, thumbnails and search.
+- Smooth viewing with pinch zoom (up to 1600%, or zoomed out to see several pages), preset zoom levels, thumbnails and search.
 - Fill PDF forms, add text, check marks and crosses to flat forms, and **sign** with saved signatures.
-- **Highlight text** by long-pressing and dragging. Highlights are standard PDF annotations, so other PDF apps see them too.
+- **Highlight, underline or strike out text** by long-pressing and dragging, and **annotate** with freehand drawing, rectangles, ellipses and sticky notes. These are standard PDF annotations, so other PDF apps see them too.
+- **Page tools:** rotate, move, delete and extract pages, or insert the pages of another PDF.
 - Copy selected text and count its words.
 
 **Text**
@@ -41,6 +44,7 @@ I got tired of that. Every popular Android office app seemed to want my money ev
 **Everywhere**
 - **Tabs:** keep lots of documents open at once. If Android closes the app in the background, your unsaved changes are still there when you come back.
 - **Search** your open, recent and recently closed files by name.
+- **Share** any open document, unsaved edits included, and read it **full screen**.
 - **Word count** for any document and for your selection.
 - Light, dark or follow-the-system themes (set in Settings), "light pages" for a single document while the app is dark, and a themed icon that matches your wallpaper.
 - Screen-reader friendly controls.
@@ -90,8 +94,8 @@ More detail: [architecture](docs/architecture.md) and [milestones and test resul
 ## Status
 
 This is a **beta**. It has been tested on a **Samsung Galaxy S24 Ultra** (Android 17, One UI 9), the Android emulator and BlueStacks. More real-phone testing is ongoing, and [bug reports](../../issues/new?template=bug_report.yml) are very welcome. Known gaps:
-- Printing and exporting Office documents to other formats aren't available yet.
-- Copy and paste inside Office documents stays within that document.
+- Office documents export to PDF only (other formats aren't offered yet). Printing goes through Share as PDF.
+- Scanned PDFs have no text recognition (OCR) yet, and the existing text of a PDF can't be edited.
 - Apple iWork files are view-only.
 
 ## Support Libreon

@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CleaningServices
+import androidx.compose.material.icons.outlined.ClearAll
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -23,8 +25,11 @@ import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Numbers
 import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.SaveAlt
+import androidx.compose.material.icons.outlined.SaveAs
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
@@ -119,6 +124,7 @@ fun AppRoot(
 
     // A document opened (or switched to) while Home is showing comes to the front.
     LaunchedEffect(activeId) { showHome = false }
+    LaunchedEffect(tabs) { tabs.activations.collect { showHome = false } }
     val active = tabList.firstOrNull { it.id == activeId }?.takeUnless { showHome }
     LaunchedEffect(tabList) { settings.retainLightTabs(tabList.map { it.id }.toSet()) }
 
@@ -417,7 +423,11 @@ private fun OverflowMenu(
                 onClick = { expanded = false; onOpen() },
             )
             if (hasActive) {
-                DropdownMenuItem(text = { Text("Save as…") }, onClick = { expanded = false; onSaveAs() })
+                DropdownMenuItem(
+                    text = { Text("Save as…") },
+                    leadingIcon = { Icon(Icons.Outlined.SaveAs, null) },
+                    onClick = { expanded = false; onSaveAs() },
+                )
                 DropdownMenuItem(
                     text = { Text("Share") },
                     leadingIcon = { Icon(Icons.Outlined.Share, null) },
@@ -429,14 +439,22 @@ private fun OverflowMenu(
                         leadingIcon = { Icon(Icons.Outlined.PictureAsPdf, null) },
                         onClick = { expanded = false; onShare(true) },
                     )
-                    DropdownMenuItem(text = { Text("Export as PDF…") }, onClick = { expanded = false; export() })
+                    DropdownMenuItem(
+                        text = { Text("Export as PDF…") },
+                        leadingIcon = { Icon(Icons.Outlined.SaveAlt, null) },
+                        onClick = { expanded = false; export() },
+                    )
                 }
                 DropdownMenuItem(
                     text = { Text("Full screen") },
                     leadingIcon = { Icon(Icons.Outlined.Fullscreen, null) },
                     onClick = { expanded = false; onFullScreen() },
                 )
-                DropdownMenuItem(text = { Text("Word count") }, onClick = { expanded = false; onWordCount() })
+                DropdownMenuItem(
+                    text = { Text("Word count") },
+                    leadingIcon = { Icon(Icons.Outlined.Numbers, null) },
+                    onClick = { expanded = false; onWordCount() },
+                )
                 if (lightPages != null) {
                     DropdownMenuItem(
                         text = { Text("Light pages") },
@@ -459,10 +477,18 @@ private fun OverflowMenu(
                 )
             }
             onCloseAll?.let { closeAll ->
-                DropdownMenuItem(text = { Text("Close all tabs") }, onClick = { expanded = false; closeAll() })
+                DropdownMenuItem(
+                    text = { Text("Close all tabs") },
+                    leadingIcon = { Icon(Icons.Outlined.ClearAll, null) },
+                    onClick = { expanded = false; closeAll() },
+                )
             }
             onClearHome?.let { clear ->
-                DropdownMenuItem(text = { Text("Clear Home") }, onClick = { expanded = false; clear() })
+                DropdownMenuItem(
+                    text = { Text("Clear Home") },
+                    leadingIcon = { Icon(Icons.Outlined.CleaningServices, null) },
+                    onClick = { expanded = false; clear() },
+                )
             }
             DropdownMenuItem(
                 text = { Text("Settings") },

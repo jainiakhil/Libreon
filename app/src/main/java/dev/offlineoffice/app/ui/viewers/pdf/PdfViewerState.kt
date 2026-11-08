@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.IntSize
 import dev.offlineoffice.app.session.MarkGeometry
 import dev.offlineoffice.app.session.PdfMark
 import dev.offlineoffice.app.session.PdfSession
+import dev.offlineoffice.pdf.AnnotType
 import dev.offlineoffice.pdf.FormField
 import dev.offlineoffice.pdf.Highlight
 import dev.offlineoffice.pdf.PageRect
@@ -32,7 +33,29 @@ enum class PlaceTool(val hint: String) {
     TEXT("Tap the page where the text should go"),
     CHECK("Tap the page to place a check mark"),
     CROSS("Tap the page to place a cross mark"),
+    NOTE("Tap the page where the note should go"),
 }
+
+/** Annotation tools that draw with a finger on a page. */
+enum class DrawTool(val hint: String) {
+    INK("Draw with your finger. Pinch to zoom."),
+    RECT("Drag to draw a rectangle"),
+    ELLIPSE("Drag to draw an ellipse"),
+}
+
+/** Strokes being drawn on one page, committed together as one drawing. */
+class InkDraft(val page: Int) {
+    val strokes = mutableStateListOf<FloatArray>()
+    var current by mutableStateOf<FloatArray?>(null)
+}
+
+/** A rectangle or ellipse being dragged out on [page], in display points. */
+data class ShapeDraft(val page: Int, val startX: Float, val startY: Float, val endX: Float, val endY: Float) {
+    val rect: PageRect get() = PageRect(minOf(startX, endX), minOf(startY, endY), maxOf(startX, endX), maxOf(startY, endY))
+}
+
+/** Where a new note goes, while its text is typed. */
+data class NoteDraft(val page: Int, val x: Float, val y: Float)
 
 /** A text field being edited in the overlay. */
 class FieldEdit(val field: FormField) {
@@ -73,6 +96,19 @@ class PdfViewerState(
     var choosing by mutableStateOf<FormField?>(null)
     var signatureTarget by mutableStateOf<SignatureTarget?>(null)
 
+    // drawing, shapes and notes
+    var drawTool by mutableStateOf<DrawTool?>(null)
+    var inkColor by mutableIntStateOf(INK_COLORS[0])
+    var ink by mutableStateOf<InkDraft?>(null)
+        private set
+    var shape by mutableStateOf<ShapeDraft?>(null)
+        private set
+    var noteDraft by mutableStateOf<NoteDraft?>(null)
+
+    /** The text of the selected note, once read. */
+    var selectedNoteText by mutableStateOf<String?>(null)
+        private set
+
     // text selection and highlights
     var selection by mutableStateOf<PdfTextSelection?>(null)
         private set
@@ -88,29 +124,55 @@ class PdfViewerState(
     var searching by mutableStateOf(false)
     private var searchJob: Job? = null
 
-    private val maxPageWidth: Float = session.pageSizes.maxOfOrNull { it.width } ?: 612f
+    private val maxPageWidth: Float get() = session.pageSizes.maxOfOrNull { it.width } ?: 612f
+    private val maxPageHeight: Float get() = session.pageSizes.maxOfOrNull { it.height } ?: 792f
 
-    /** Pixels per point at zoom 1. */
+    /** Pixels per point at true size (100%: a point is 1/72 inch on screen). Set by the viewer. */
+    var actualScale = 1f
+
+    /** Pixels per point at zoom 1 (the widest page fits the screen width). */
     val fitScale: Float
         get() = PdfLayoutMath.fitScale(viewport.width, maxPageWidth, paddingPx)
 
     /** Pixels per point at the current zoom. */
     val scale: Float get() = fitScale * zoom
 
+    /** The zoom as a percentage of the page's true size, as PDF viewers show it. */
+    val percent: Int get() = (scale / actualScale * 100).roundToInt()
+
+    /** Zoom that fits the tallest page on screen. */
+    val fitPageZoom: Float
+        get() = ((viewport.height - 2 * paddingPx) / (maxPageHeight * fitScale)).coerceAtMost(1f).coerceAtLeast(0.01f)
+
+    val minZoom: Float get() = minOf(PdfSession.MIN_ZOOM, fitPageZoom)
+
+    /** Up to [MAX_PERCENT] of true size, while a page stays within what can be laid out. */
+    val maxZoom: Float
+        get() {
+            val fit = fitScale.coerceAtLeast(0.001f)
+            val bySize = MAX_PAGE_PX / (maxOf(maxPageWidth, maxPageHeight) * fit)
+            return minOf(MAX_PERCENT / 100f * actualScale / fit, bySize, PdfSession.MAX_ZOOM).coerceAtLeast(1f)
+        }
+
+    /** The zoom showing the page at [percent] of its true size. */
+    fun zoomForPercent(percent: Int): Float = percent / 100f * actualScale / fitScale.coerceAtLeast(0.001f)
+
     /** Width of the list content in pixels (wider than the viewport when zoomed in). */
     val contentWidthPx: Int
         get() = maxOf(viewport.width, (maxPageWidth * scale + 2 * paddingPx).roundToInt())
 
-    /** Base render width: sharp at zoom 1 on most screens, bounded for memory. */
+    /** Base render width: sharp at zoom 1 (or the zoom, when smaller) on most screens, bounded for memory. */
     fun baseWidthPx(page: Int): Int =
-        (session.pageSizes[page].width * fitScale).roundToInt().coerceIn(1, MAX_BASE_WIDTH_PX)
+        (session.pageSizes[page].width * fitScale * zoom.coerceAtMost(1f)).roundToInt().coerceIn(1, MAX_BASE_WIDTH_PX)
 
     fun pageHeightPx(page: Int, scale: Float): Float = session.pageSizes[page].height * scale
 
     // --- zoom ---
 
+    fun zoomTo(target: Float) = zoomBy(target / zoom)
+
     fun zoomBy(factor: Float, focal: Offset = Offset(viewport.width / 2f, viewport.height / 2f)) {
-        val target = (zoom * factor).coerceIn(PdfSession.MIN_ZOOM, PdfSession.MAX_ZOOM)
+        val target = (zoom * factor).coerceIn(minZoom, maxZoom)
         val oldScale = scale
         val newScale = fitScale * target
         val f = newScale / oldScale
@@ -136,6 +198,8 @@ class PdfViewerState(
 
     fun endPinch() = zoomBy(gestureScale, gestureFocal)
 
+    fun showMessage(text: String) = onMessage(text)
+
     fun jumpTo(page: Int, topPts: Float = 0f, leftPts: Float? = null) {
         scope.launch {
             val y = (topPts * scale - viewport.height / 3f).coerceAtLeast(0f).roundToInt()
@@ -151,11 +215,12 @@ class PdfViewerState(
 
     /** A tap at (x, y) display points on [page], with that page's form [fields]. */
     fun tapPage(page: Int, x: Float, y: Float, fields: List<FormField>, highlights: List<Highlight> = emptyList()) {
+        if (drawTool != null) return
         commitEdit()
         choosing = null
         if (selection != null || selectedHighlight != null) {
             clearSelection()
-            selectedHighlight = null
+            selectAnnotation(null)
             return
         }
         tool?.let { t ->
@@ -169,7 +234,7 @@ class PdfViewerState(
         }
         val field = fields.lastOrNull { it.rect.contains(x, y) && !it.readOnly }
         if (field == null) {
-            selectedHighlight = highlights.lastOrNull { h -> h.rects.any { it.contains(x, y) } }
+            selectAnnotation(highlights.lastOrNull { h -> h.rects.any { it.contains(x, y) } })
             return
         }
         when (field.type) {
@@ -203,6 +268,10 @@ class PdfViewerState(
     private fun placeTool(tool: PlaceTool, page: Int, x: Float, y: Float) {
         val size = session.pageSizes[page]
         val mark = when (tool) {
+            PlaceTool.NOTE -> {
+                noteDraft = NoteDraft(page, x, y)
+                return
+            }
             PlaceTool.TEXT -> {
                 val h = DEFAULT_FONT_PT * MarkGeometry.TEXT_LINE_FACTOR
                 PdfMark.Text(session.nextMarkId(), page, MarkGeometry.centredRect(x, y, textWidthPts("", DEFAULT_FONT_PT), h, size.width, size.height), "", INK)
@@ -271,8 +340,9 @@ class PdfViewerState(
 
     /** Starts a selection at the word under (x, y) on [page] (a long press). */
     fun startSelection(page: Int, x: Float, y: Float) {
+        if (drawTool != null) return
         commitEdit()
-        selectedHighlight = null
+        selectAnnotation(null)
         selectJob?.cancel()
         selectJob = scope.launch {
             val at = session.charIndexAt(page, x, y, SELECT_TOLERANCE_PT)
@@ -314,16 +384,100 @@ class PdfViewerState(
         session.selectedText = null
     }
 
-    fun highlightSelection(argb: Int) {
+    fun highlightSelection(argb: Int, type: AnnotType = AnnotType.HIGHLIGHT) {
         val s = selection ?: return
         clearSelection()
-        scope.launch { if (!session.highlight(s.page, s.start, s.end, argb)) onMessage("Could not highlight that text") }
+        scope.launch { if (!session.highlight(s.page, s.start, s.end, argb, type)) onMessage("Could not mark that text") }
+    }
+
+    /** Selects an annotation (or clears the selection with null); a note's text is read for display. */
+    fun selectAnnotation(annotation: Highlight?) {
+        selectedHighlight = annotation
+        selectedNoteText = null
+        if (annotation?.type == AnnotType.NOTE) {
+            scope.launch {
+                val text = session.annotationText(annotation)
+                if (selectedHighlight == annotation) selectedNoteText = text
+            }
+        }
     }
 
     fun removeSelectedHighlight() {
         val h = selectedHighlight ?: return
-        selectedHighlight = null
-        scope.launch { if (!session.removeHighlight(h)) onMessage("Could not remove the highlight") }
+        selectAnnotation(null)
+        scope.launch { if (!session.removeHighlight(h)) onMessage("Could not remove that") }
+    }
+
+    // --- drawing, shapes and notes ---
+
+    fun startDrawing(draw: DrawTool) {
+        commitEdit()
+        clearSelection()
+        selectAnnotation(null)
+        tool = null
+        drawTool = draw
+    }
+
+    /** Ends the drawing tool, committing any strokes drawn. */
+    fun finishDrawing() {
+        commitInk()
+        drawTool = null
+        shape = null
+    }
+
+    fun drawStart(page: Int, x: Float, y: Float) {
+        when (drawTool) {
+            DrawTool.INK -> {
+                // Strokes on another page start a new drawing there.
+                if (ink?.page != page) commitInk()
+                val draft = ink ?: InkDraft(page).also { ink = it }
+                draft.current = floatArrayOf(x, y)
+            }
+            DrawTool.RECT, DrawTool.ELLIPSE -> shape = ShapeDraft(page, x, y, x, y)
+            null -> Unit
+        }
+    }
+
+    fun drawMove(page: Int, x: Float, y: Float) {
+        when (drawTool) {
+            DrawTool.INK -> ink?.takeIf { it.page == page }?.let { draft -> draft.current = draft.current?.plus(floatArrayOf(x, y)) }
+            DrawTool.RECT, DrawTool.ELLIPSE -> shape = shape?.takeIf { it.page == page }?.copy(endX = x, endY = y)
+            null -> Unit
+        }
+    }
+
+    fun drawEnd() {
+        when (drawTool) {
+            DrawTool.INK -> ink?.let { draft ->
+                draft.current?.takeIf { it.size >= 4 }?.let { draft.strokes += it }
+                draft.current = null
+            }
+            DrawTool.RECT, DrawTool.ELLIPSE -> {
+                val s = shape ?: return
+                shape = null
+                val r = s.rect
+                if (r.width < 4 || r.height < 4) return
+                val ellipse = drawTool == DrawTool.ELLIPSE
+                scope.launch { if (!session.addShape(s.page, r, ellipse, inkColor, INK_WIDTH)) onMessage("Could not add the shape") }
+            }
+            null -> Unit
+        }
+    }
+
+    private fun commitInk() {
+        val draft = ink ?: return
+        ink = null
+        val strokes = draft.strokes.toList()
+        if (strokes.isEmpty()) return
+        scope.launch { if (!session.addInk(draft.page, strokes, inkColor, INK_WIDTH)) onMessage("Could not add the drawing") }
+    }
+
+    /** Adds the note being placed, with [text]. */
+    fun addNote(text: String) {
+        val draft = noteDraft ?: return
+        noteDraft = null
+        if (text.isBlank()) return
+        scope.launch { if (!session.addNote(draft.page, draft.x, draft.y, text.trim(), NOTE_COLOR)) onMessage("Could not add the note") }
     }
 
     // --- search ---
@@ -372,6 +526,20 @@ class PdfViewerState(
 
     companion object {
         const val MAX_BASE_WIDTH_PX = 1280
+
+        /** Highest zoom offered, in percent of true size. */
+        const val MAX_PERCENT = 1600
+
+        /** Largest page size in pixels: layout sizes beyond 2^16 cannot be measured. */
+        const val MAX_PAGE_PX = 60_000f
+
+        /** Zoom levels offered in the zoom menu, in percent of true size. */
+        val ZOOM_PRESETS = listOf(50, 75, 100, 125, 150, 200, 400, 800, 1600)
+
+        /** Colours for drawings, shapes, notes and underlines. */
+        val INK_COLORS = listOf(0xFFE53935.toInt(), 0xFF1E88E5.toInt(), 0xFF43A047.toInt(), 0xFF000000.toInt())
+        const val INK_WIDTH = 2f
+        const val NOTE_COLOR = 0xFFFFC107.toInt()
         const val DEFAULT_FONT_PT = 12f
         const val DEFAULT_SYMBOL_PT = 14f
         const val INK = 0xFF000000.toInt()

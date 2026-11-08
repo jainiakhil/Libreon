@@ -15,11 +15,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.FitScreen
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
-import androidx.compose.material.icons.outlined.ZoomIn
-import androidx.compose.material.icons.outlined.ZoomOut
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -131,20 +128,18 @@ fun OfficeView(session: OfficeSession, onSave: () -> Unit, onReload: () -> Unit)
                 OfficeClient.State.Ready -> Unit
             }
         }
-        if (state == OfficeClient.State.Ready && !LocalFullScreen.current) {
-            Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
-                Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    // Writer reports a live count (and the selection's) as the user types and selects.
+        // Writer reports a live count (and the selection's) as the user types and selects.
+        // (Zoom buttons are in the page's own toolbar.)
+        if (session.kind == DocumentKind.WORD && state == OfficeClient.State.Ready && !LocalFullScreen.current) {
+            wordCount?.let { line ->
+                Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
                     Text(
-                        if (session.kind == DocumentKind.WORD) wordCount.orEmpty() else "",
-                        Modifier.weight(1f),
+                        line,
+                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    IconButton(onClick = document::zoomOut) { Icon(Icons.Outlined.ZoomOut, "Zoom out") }
-                    IconButton(onClick = document::zoomToFit) { Icon(Icons.Outlined.FitScreen, "Fit to width") }
-                    IconButton(onClick = document::zoomIn) { Icon(Icons.Outlined.ZoomIn, "Zoom in") }
                 }
             }
         }

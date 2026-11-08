@@ -27,6 +27,7 @@
 #include "fpdf_annot.h"
 #include "fpdf_edit.h"
 #include "fpdf_formfill.h"
+#include "fpdf_ppo.h"
 #include "fpdf_save.h"
 #include "fpdf_text.h"
 #include "fpdfview.h"
@@ -876,19 +877,22 @@ Java_dev_offlineoffice_pdf_PdfiumNative_textRects(JNIEnv* env, jclass, jlong han
     return ToJava(env, out);
 }
 
-// Adds a /Highlight annotation covering the display rectangles [l, t, r, b, ...] in color
-// 0xAARRGGBB, with `contents` (the highlighted text) as its /Contents.
+// Adds a text markup annotation (subtype FPDF_ANNOT_HIGHLIGHT, _UNDERLINE, _STRIKEOUT or
+// _SQUIGGLY) covering the display rectangles [l, t, r, b, ...] in color 0xAARRGGBB, with
+// `contents` (the marked text) as its /Contents.
 JNIEXPORT jboolean JNICALL
 Java_dev_offlineoffice_pdf_PdfiumNative_addHighlight(JNIEnv* env, jclass, jlong handle, jint index,
-                                                     jfloatArray rects, jint color, jstring contents) {
+                                                     jint subtype, jfloatArray rects, jint color, jstring contents) {
     std::lock_guard<std::mutex> guard(g_lock);
     Document* d = FromHandle(handle);
     FPDF_PAGE page = GetPage(d, index);
     const jsize n = env->GetArrayLength(rects);
     if (page == nullptr || n < 4) return JNI_FALSE;
+    if (subtype != FPDF_ANNOT_HIGHLIGHT && subtype != FPDF_ANNOT_UNDERLINE &&
+        subtype != FPDF_ANNOT_STRIKEOUT && subtype != FPDF_ANNOT_SQUIGGLY) return JNI_FALSE;
     std::vector<float> r(static_cast<size_t>(n));
     env->GetFloatArrayRegion(rects, 0, n, r.data());
-    FPDF_ANNOTATION annot = FPDFPage_CreateAnnot(page, FPDF_ANNOT_HIGHLIGHT);
+    FPDF_ANNOTATION annot = FPDFPage_CreateAnnot(page, subtype);
     if (annot == nullptr) return JNI_FALSE;
     const Affine m = DisplayToUser(page);
     FS_RECTF bounds{};
@@ -937,8 +941,10 @@ Java_dev_offlineoffice_pdf_PdfiumNative_addHighlight(JNIEnv* env, jclass, jlong 
     return ok ? JNI_TRUE : JNI_FALSE;
 }
 
-// The page's highlight annotations: [count, then per highlight: annotIndex, red, green, blue,
-// rectCount, l, t, r, b, ...].
+// The page's markup annotations that the app can select and remove (text markup, ink,
+// rectangles, ellipses and notes): [count, then per annotation: annotIndex, subtype, red,
+// green, blue, rectCount, l, t, r, b, ...]. Text markup gives one rectangle per quad; the
+// others give their bounding rectangle.
 JNIEXPORT jfloatArray JNICALL
 Java_dev_offlineoffice_pdf_PdfiumNative_highlights(JNIEnv* env, jclass, jlong handle, jint index) {
     std::lock_guard<std::mutex> guard(g_lock);
@@ -950,17 +956,48 @@ Java_dev_offlineoffice_pdf_PdfiumNative_highlights(JNIEnv* env, jclass, jlong ha
         for (int i = 0; i < annots; ++i) {
             FPDF_ANNOTATION annot = FPDFPage_GetAnnot(page, i);
             if (annot == nullptr) continue;
-            if (FPDFAnnot_GetSubtype(annot) == FPDF_ANNOT_HIGHLIGHT) {
+            const int subtype = FPDFAnnot_GetSubtype(annot);
+            const bool markup = subtype == FPDF_ANNOT_HIGHLIGHT || subtype == FPDF_ANNOT_UNDERLINE ||
+                                subtype == FPDF_ANNOT_STRIKEOUT || subtype == FPDF_ANNOT_SQUIGGLY;
+            const bool other = subtype == FPDF_ANNOT_INK || subtype == FPDF_ANNOT_SQUARE ||
+                               subtype == FPDF_ANNOT_CIRCLE || subtype == FPDF_ANNOT_TEXT;
+            if (markup || other) {
                 unsigned int r = 255, g = 235, b = 59, a = 255;
                 FPDFAnnot_GetColor(annot, FPDFANNOT_COLORTYPE_Color, &r, &g, &b, &a);
                 out[0] += 1;
-                out.insert(out.end(), {static_cast<float>(i), static_cast<float>(r), static_cast<float>(g), static_cast<float>(b)});
-                QuadsToDisplay(annot, m, &out);
+                out.insert(out.end(), {static_cast<float>(i), static_cast<float>(subtype),
+                                       static_cast<float>(r), static_cast<float>(g), static_cast<float>(b)});
+                FS_RECTF rect{};
+                if (markup) {
+                    QuadsToDisplay(annot, m, &out);
+                } else if (FPDFAnnot_GetRect(annot, &rect)) {
+                    float d[4];
+                    RectToDisplay(m, rect.left, rect.bottom, rect.right, rect.top, d);
+                    out.push_back(1);
+                    out.insert(out.end(), d, d + 4);
+                } else {
+                    out.push_back(0);
+                }
             }
             FPDFPage_CloseAnnot(annot);
         }
     }
     return ToJava(env, out);
+}
+
+// The /Contents text of the annotation at annotIndex (a note's text), or null.
+JNIEXPORT jstring JNICALL
+Java_dev_offlineoffice_pdf_PdfiumNative_annotContents(JNIEnv* env, jclass, jlong handle, jint index, jint annotIndex) {
+    std::lock_guard<std::mutex> guard(g_lock);
+    FPDF_PAGE page = GetPage(FromHandle(handle), index);
+    if (page == nullptr) return nullptr;
+    FPDF_ANNOTATION annot = FPDFPage_GetAnnot(page, annotIndex);
+    if (annot == nullptr) return nullptr;
+    const std::u16string text = ReadWide([&](FPDF_WCHAR* buf, unsigned long len) {
+        return FPDFAnnot_GetStringValue(annot, "Contents", buf, len);
+    });
+    FPDFPage_CloseAnnot(annot);
+    return env->NewString(reinterpret_cast<const jchar*>(text.data()), static_cast<jsize>(text.size()));
 }
 
 // Removes the annotation at annotIndex.
@@ -988,6 +1025,208 @@ Java_dev_offlineoffice_pdf_PdfiumNative_save(JNIEnv*, jclass, jlong handle, jint
     writer.fd = fd;
     const bool ok = FPDF_SaveAsCopy(d->doc, &writer.base, incremental ? FPDF_INCREMENTAL : FPDF_NO_INCREMENTAL);
     return ok && !writer.failed ? JNI_TRUE : JNI_FALSE;
+}
+
+// --- drawn annotations (PDFium generates their appearance) ---
+
+namespace {
+
+// Sets an annotation's colour (0xAARRGGBB), line width and print flag.
+bool StyleAnnot(FPDF_ANNOTATION annot, jint color, float width) {
+    const auto c = static_cast<uint32_t>(color);
+    return FPDFAnnot_SetColor(annot, FPDFANNOT_COLORTYPE_Color, (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF, (c >> 24) & 0xFF) &&
+           (width <= 0 || FPDFAnnot_SetBorder(annot, 0, 0, width)) &&
+           FPDFAnnot_SetFlags(annot, FPDF_ANNOT_FLAG_PRINT);
+}
+
+// Maps display rectangle {l, t, r, b} to a user-space FS_RECTF, grown by `pad` points.
+FS_RECTF UserRect(const Affine& m, float l, float t, float r, float b, float pad) {
+    double xs[4], ys[4];
+    m.Map(l, t, &xs[0], &ys[0]);
+    m.Map(r, t, &xs[1], &ys[1]);
+    m.Map(l, b, &xs[2], &ys[2]);
+    m.Map(r, b, &xs[3], &ys[3]);
+    FS_RECTF rect{};
+    rect.left = static_cast<float>(*std::min_element(xs, xs + 4)) - pad;
+    rect.right = static_cast<float>(*std::max_element(xs, xs + 4)) + pad;
+    rect.bottom = static_cast<float>(*std::min_element(ys, ys + 4)) - pad;
+    rect.top = static_cast<float>(*std::max_element(ys, ys + 4)) + pad;
+    return rect;
+}
+
+// Finishes a newly created annotation: on failure it is removed again (it is the page's last).
+jboolean FinishAnnot(Document* d, int index, FPDF_PAGE page, FPDF_ANNOTATION annot, bool ok) {
+    FPDFPage_CloseAnnot(annot);
+    if (!ok) FPDFPage_RemoveAnnot(page, FPDFPage_GetAnnotCount(page) - 1);
+    EvictPage(d, index);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+}  // namespace
+
+// Adds an /Ink annotation. strokes = [pointCount, x, y, x, y, ..., pointCount, ...] in display points.
+JNIEXPORT jboolean JNICALL
+Java_dev_offlineoffice_pdf_PdfiumNative_addInk(JNIEnv* env, jclass, jlong handle, jint index,
+                                               jfloatArray strokes, jint color, jfloat width) {
+    std::lock_guard<std::mutex> guard(g_lock);
+    Document* d = FromHandle(handle);
+    FPDF_PAGE page = GetPage(d, index);
+    const jsize n = env->GetArrayLength(strokes);
+    if (page == nullptr || n < 3) return JNI_FALSE;
+    std::vector<float> s(static_cast<size_t>(n));
+    env->GetFloatArrayRegion(strokes, 0, n, s.data());
+    FPDF_ANNOTATION annot = FPDFPage_CreateAnnot(page, FPDF_ANNOT_INK);
+    if (annot == nullptr) return JNI_FALSE;
+    const Affine m = DisplayToUser(page);
+    float l = 1e9f, t = 1e9f, r = -1e9f, b = -1e9f;
+    bool ok = true;
+    for (size_t i = 0; i < s.size() && ok;) {
+        const auto count = static_cast<size_t>(s[i++]);
+        if (count == 0 || i + 2 * count > s.size()) break;
+        std::vector<FS_POINTF> points(count);
+        for (size_t p = 0; p < count; ++p, i += 2) {
+            double ux, uy;
+            m.Map(s[i], s[i + 1], &ux, &uy);
+            points[p] = {static_cast<float>(ux), static_cast<float>(uy)};
+            l = std::min(l, s[i]); r = std::max(r, s[i]);
+            t = std::min(t, s[i + 1]); b = std::max(b, s[i + 1]);
+        }
+        ok = FPDFAnnot_AddInkStroke(annot, points.data(), count) >= 0;
+    }
+    if (ok) {
+        const FS_RECTF rect = UserRect(m, l, t, r, b, width);
+        ok = FPDFAnnot_SetRect(annot, &rect) && StyleAnnot(annot, color, width);
+    }
+    return FinishAnnot(d, index, page, annot, ok);
+}
+
+// Adds a /Square (subtype FPDF_ANNOT_SQUARE) or /Circle annotation outlining the display
+// rectangle {l, t, r, b}.
+JNIEXPORT jboolean JNICALL
+Java_dev_offlineoffice_pdf_PdfiumNative_addShape(JNIEnv*, jclass, jlong handle, jint index, jint subtype,
+                                                 jfloat l, jfloat t, jfloat r, jfloat b, jint color, jfloat width) {
+    std::lock_guard<std::mutex> guard(g_lock);
+    Document* d = FromHandle(handle);
+    FPDF_PAGE page = GetPage(d, index);
+    if (page == nullptr || (subtype != FPDF_ANNOT_SQUARE && subtype != FPDF_ANNOT_CIRCLE)) return JNI_FALSE;
+    FPDF_ANNOTATION annot = FPDFPage_CreateAnnot(page, subtype);
+    if (annot == nullptr) return JNI_FALSE;
+    const FS_RECTF rect = UserRect(DisplayToUser(page), l, t, r, b, 0);
+    const bool ok = FPDFAnnot_SetRect(annot, &rect) && StyleAnnot(annot, color, width);
+    return FinishAnnot(d, index, page, annot, ok);
+}
+
+// Adds a sticky note (/Text annotation) with `contents`, its icon's top-left at display point (x, y).
+JNIEXPORT jboolean JNICALL
+Java_dev_offlineoffice_pdf_PdfiumNative_addNote(JNIEnv* env, jclass, jlong handle, jint index,
+                                                jfloat x, jfloat y, jstring contents, jint color) {
+    std::lock_guard<std::mutex> guard(g_lock);
+    Document* d = FromHandle(handle);
+    FPDF_PAGE page = GetPage(d, index);
+    if (page == nullptr) return JNI_FALSE;
+    FPDF_ANNOTATION annot = FPDFPage_CreateAnnot(page, FPDF_ANNOT_TEXT);
+    if (annot == nullptr) return JNI_FALSE;
+    constexpr float kIcon = 20;
+    const FS_RECTF rect = UserRect(DisplayToUser(page), x, y, x + kIcon, y + kIcon, 0);
+    const std::u16string text = JavaToWide(env, contents);
+    const bool ok = FPDFAnnot_SetRect(annot, &rect) && StyleAnnot(annot, color, 0) &&
+                    FPDFAnnot_SetStringValue(annot, "Contents", Wide(text));
+    return FinishAnnot(d, index, page, annot, ok);
+}
+
+// --- pages ---
+
+// Deletes the pages at `indices` (any order).
+JNIEXPORT jboolean JNICALL
+Java_dev_offlineoffice_pdf_PdfiumNative_deletePages(JNIEnv* env, jclass, jlong handle, jintArray indices) {
+    std::lock_guard<std::mutex> guard(g_lock);
+    Document* d = FromHandle(handle);
+    std::vector<jint> pages(static_cast<size_t>(env->GetArrayLength(indices)));
+    env->GetIntArrayRegion(indices, 0, static_cast<jsize>(pages.size()), pages.data());
+    CloseAllPages(d);
+    std::sort(pages.rbegin(), pages.rend());  // last first, so earlier indices stay valid
+    for (jint p : pages) FPDFPage_Delete(d->doc, p);
+    return JNI_TRUE;
+}
+
+// Turns the pages at `indices` by `quarterTurns` x 90 degrees clockwise.
+JNIEXPORT jboolean JNICALL
+Java_dev_offlineoffice_pdf_PdfiumNative_rotatePages(JNIEnv* env, jclass, jlong handle, jintArray indices, jint quarterTurns) {
+    std::lock_guard<std::mutex> guard(g_lock);
+    Document* d = FromHandle(handle);
+    std::vector<jint> pages(static_cast<size_t>(env->GetArrayLength(indices)));
+    env->GetIntArrayRegion(indices, 0, static_cast<jsize>(pages.size()), pages.data());
+    CloseAllPages(d);
+    bool ok = true;
+    for (jint p : pages) {
+        FPDF_PAGE page = FPDF_LoadPage(d->doc, p);
+        if (page == nullptr) {
+            ok = false;
+            continue;
+        }
+        FPDFPage_SetRotation(page, ((FPDFPage_GetRotation(page) + quarterTurns) % 4 + 4) % 4);
+        FPDF_ClosePage(page);
+    }
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+// Moves the pages at `indices` (kept in that order) so the first lands at `destIndex` of the result.
+JNIEXPORT jboolean JNICALL
+Java_dev_offlineoffice_pdf_PdfiumNative_movePages(JNIEnv* env, jclass, jlong handle, jintArray indices, jint destIndex) {
+    std::lock_guard<std::mutex> guard(g_lock);
+    Document* d = FromHandle(handle);
+    std::vector<jint> pages(static_cast<size_t>(env->GetArrayLength(indices)));
+    env->GetIntArrayRegion(indices, 0, static_cast<jsize>(pages.size()), pages.data());
+    CloseAllPages(d);
+    const bool ok = FPDF_MovePages(d->doc, reinterpret_cast<const int*>(pages.data()),
+                                   static_cast<unsigned long>(pages.size()), destIndex);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+// Inserts every page of the PDF in srcFd (not closed here) before page `insertAt`.
+// Returns the number of pages inserted, or a negative PDFium error (e.g. -FPDF_ERR_PASSWORD).
+JNIEXPORT jint JNICALL
+Java_dev_offlineoffice_pdf_PdfiumNative_importPages(JNIEnv*, jclass, jlong handle, jint srcFd, jlong length, jint insertAt) {
+    std::lock_guard<std::mutex> guard(g_lock);
+    Document* d = FromHandle(handle);
+    Document src;
+    src.fd = srcFd;
+    src.access.m_FileLen = static_cast<unsigned long>(length);
+    src.access.m_GetBlock = ReadBlock;
+    src.access.m_Param = &src;
+    src.doc = FPDF_LoadCustomDocument(&src.access, nullptr);
+    if (src.doc == nullptr) {
+        const auto err = static_cast<jint>(FPDF_GetLastError());
+        return -(err == 0 ? FPDF_ERR_UNKNOWN : err);
+    }
+    const int count = FPDF_GetPageCount(src.doc);
+    CloseAllPages(d);
+    const bool ok = FPDF_ImportPages(d->doc, src.doc, nullptr, insertAt);
+    FPDF_CloseDocument(src.doc);
+    return ok ? count : -FPDF_ERR_UNKNOWN;
+}
+
+// Writes a new PDF holding copies of the pages at `indices` (in that order) to fd (not closed here).
+JNIEXPORT jboolean JNICALL
+Java_dev_offlineoffice_pdf_PdfiumNative_extractPages(JNIEnv* env, jclass, jlong handle, jintArray indices, jint fd) {
+    std::lock_guard<std::mutex> guard(g_lock);
+    Document* d = FromHandle(handle);
+    std::vector<jint> pages(static_cast<size_t>(env->GetArrayLength(indices)));
+    env->GetIntArrayRegion(indices, 0, static_cast<jsize>(pages.size()), pages.data());
+    if (d->form != nullptr) FORM_ForceToKillFocus(d->form);
+    FPDF_DOCUMENT out = FPDF_CreateNewDocument();
+    if (out == nullptr) return JNI_FALSE;
+    bool ok = FPDF_ImportPagesByIndex(out, d->doc, reinterpret_cast<const int*>(pages.data()),
+                                      static_cast<unsigned long>(pages.size()), 0);
+    if (ok) {
+        FileWriter writer;
+        writer.base.version = 1;
+        writer.base.WriteBlock = WriteBlock;
+        writer.fd = fd;
+        ok = FPDF_SaveAsCopy(out, &writer.base, FPDF_NO_INCREMENTAL) && !writer.failed;
+    }
+    FPDF_CloseDocument(out);
+    return ok ? JNI_TRUE : JNI_FALSE;
 }
 
 }  // extern "C"

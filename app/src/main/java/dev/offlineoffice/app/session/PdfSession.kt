@@ -4,8 +4,12 @@ package dev.offlineoffice.app.session
 import android.graphics.Bitmap
 import android.os.ParcelFileDescriptor
 import android.util.LruCache
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import dev.offlineoffice.app.doc.DocumentKind
 import dev.offlineoffice.app.text.WordCounter
+import dev.offlineoffice.pdf.AnnotType
 import dev.offlineoffice.pdf.FormField
 import dev.offlineoffice.pdf.FormType
 import dev.offlineoffice.pdf.Highlight
@@ -47,7 +51,8 @@ class PdfSession(override val tabId: String) : DocumentSession, SaveAdvice, Docu
     /** The snapshot waiting for a password; deleted once opened. */
     private var lockedSnapshot: File? = null
 
-    var pageSizes: List<PageSize> = emptyList()
+    /** Page sizes in display points; snapshot state, so viewers follow page edits. */
+    var pageSizes: List<PageSize> by mutableStateOf(emptyList())
         private set
     var formType: FormType = FormType.NONE
         private set
@@ -204,16 +209,58 @@ class PdfSession(override val tabId: String) : DocumentSession, SaveAdvice, Docu
         return withContext(thread) { document?.highlights(index) ?: emptyList() }.also { highlightCache[index] = rev to it }
     }
 
-    /** Highlights characters [start, end) of page [index] with a /Highlight annotation. */
-    suspend fun highlight(index: Int, start: Int, end: Int, argb: Int): Boolean {
+    /** Marks characters [start, end) of page [index] with a highlight (or underline, strike-out…). */
+    suspend fun highlight(index: Int, start: Int, end: Int, argb: Int, type: AnnotType = AnnotType.HIGHLIGHT): Boolean {
         val text = pageText(index).let { it.substring(start.coerceIn(0, it.length), end.coerceIn(0, it.length)) }
         return edit { doc ->
             val rects = doc.textRects(index, start, end)
-            rects.isNotEmpty() && doc.addHighlight(index, rects, argb, text.trim())
+            rects.isNotEmpty() && doc.addHighlight(index, rects, argb, text.trim(), type)
         }
     }
 
     suspend fun removeHighlight(highlight: Highlight): Boolean = edit { it.removeAnnotation(highlight.page, highlight.annotIndex) }
+
+    /** The text of a note (or any annotation). */
+    suspend fun annotationText(highlight: Highlight): String =
+        withContext(thread) { document?.annotationText(highlight.page, highlight.annotIndex).orEmpty() }
+
+    // --- annotations ---
+
+    /** Adds a freehand drawing of [strokes] ([x, y, ...] display points each) to page [index]. */
+    suspend fun addInk(index: Int, strokes: List<FloatArray>, argb: Int, width: Float) = edit { it.addInk(index, strokes, argb, width) }
+
+    suspend fun addShape(index: Int, rect: PageRect, ellipse: Boolean, argb: Int, width: Float) =
+        edit { it.addShape(index, rect, ellipse, argb, width) }
+
+    suspend fun addNote(index: Int, x: Float, y: Float, text: String, argb: Int) = edit { it.addNote(index, x, y, text, argb) }
+
+    // --- pages ---
+
+    suspend fun deletePages(indices: List<Int>) = editPages { it.deletePages(indices) }
+
+    suspend fun rotatePages(indices: List<Int>, quarterTurns: Int) = editPages { it.rotatePages(indices, quarterTurns) }
+
+    suspend fun movePages(indices: List<Int>, destIndex: Int) = editPages { it.movePages(indices, destIndex) }
+
+    /** Inserts every page of the PDF in [source] before page [insertAt]. Throws [PdfOpenException]. */
+    suspend fun insertPdf(source: ParcelFileDescriptor, insertAt: Int): Boolean = editPages { it.importPages(source, insertAt) > 0 }
+
+    /** Writes the pages at [indices] as a new PDF to [target]; the document itself is unchanged. */
+    suspend fun extractPages(indices: List<Int>, target: File) = withContext(thread) {
+        checkNotNull(document) { "session closed" }.extractPages(indices, target)
+    }
+
+    /** A page-structure edit: the page list is reread, pending marks go and the next save is full. */
+    private suspend fun editPages(block: (PdfDocument) -> Boolean): Boolean {
+        val ok = edit(block)
+        if (ok) {
+            withContext(thread) { document?.let { doc -> pageSizes = (0 until doc.pageCount).map(doc::pageSize) } }
+            contentEdited = true
+            _marks.value = emptyList()
+            currentPage = currentPage.coerceIn(0, (pageSizes.size - 1).coerceAtLeast(0))
+        }
+        return ok
+    }
 
     /** Text the viewer has selected, for the word count. */
      var selectedText: String? = null
@@ -341,7 +388,8 @@ class PdfSession(override val tabId: String) : DocumentSession, SaveAdvice, Docu
     }
 
     companion object {
-        const val MIN_ZOOM = 1f
-        const val MAX_ZOOM = 6f
+        /** Hard bounds on the zoom (1 = page width fits the screen); the viewer narrows them. */
+        const val MIN_ZOOM = 0.2f
+        const val MAX_ZOOM = 100f
     }
 }

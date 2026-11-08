@@ -75,5 +75,25 @@ data class FormField(
 /** One search match: the rectangles covering its text (several when it wraps lines). */
 data class SearchMatch(val page: Int, val rects: List<PageRect>)
 
-/** A /Highlight annotation; [annotIndex] identifies it within its page until the next edit. */
-data class Highlight(val page: Int, val annotIndex: Int, val argb: Int, val rects: List<PageRect>)
+/** Kinds of annotation the app can add, select and remove ([code] is PDFium's subtype). */
+enum class AnnotType(val code: Int, val label: String) {
+    HIGHLIGHT(9, "Highlight"),
+    UNDERLINE(10, "Underline"),
+    SQUIGGLY(11, "Squiggly underline"),
+    STRIKEOUT(12, "Strike-out"),
+    INK(15, "Drawing"),
+    SQUARE(5, "Rectangle"),
+    CIRCLE(6, "Ellipse"),
+    NOTE(1, "Note");
+
+    companion object {
+        fun of(code: Int): AnnotType? = entries.firstOrNull { it.code == code }
+    }
+}
+
+/**
+ * A markup annotation (highlight, underline, drawing, shape or note); [annotIndex] identifies it
+ * within its page until the next edit. Text markup has one rectangle per marked run; the others
+ * have their bounding box.
+ */
+data class Highlight(val page: Int, val annotIndex: Int, val type: AnnotType, val argb: Int, val rects: List<PageRect>)

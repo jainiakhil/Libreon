@@ -2,6 +2,7 @@
 package dev.offlineoffice.office
 
 import android.annotation.SuppressLint
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.graphics.PointF
@@ -155,15 +156,12 @@ internal class OfficeDocument(private val context: Context, val file: File) {
         }
     }
 
-    /** Zooms the page the way the front-end's own zoom buttons do ([OfficeProtocol.ZOOM_IN] etc.). */
-    fun zoom(step: Int) {
-        val action = when (step) {
-            OfficeProtocol.ZOOM_IN -> "zoomin"
-            OfficeProtocol.ZOOM_OUT -> "zoomout"
-            else -> "fitwidthzoom"
-        }
-        webView.post { webView.evaluateJavascript("app.dispatcher.dispatch('$action')", null) }
+    /** The page is ready: adds zoom buttons to its toolbar (styled by branding.css). */
+    private fun onReady() {
+        if (_state.compareAndSet(State.Loading, State.Ready)) addZoomButtons()
     }
+
+    private fun addZoomButtons() = webView.post { webView.evaluateJavascript(ZOOM_BUTTONS_JS, null) }
 
     /** Writes the document as a PDF to [target], leaving the document itself as it is. */
     suspend fun exportPdf(target: File) {
@@ -240,7 +238,7 @@ internal class OfficeDocument(private val context: Context, val file: File) {
         when (val event = EngineMessages.parse(message)) {
             is EngineEvent.Modified -> _modified.value = event.modified
             is EngineEvent.SaveResult -> pendingSave.get()?.complete(event.success)
-            EngineEvent.Loaded -> _state.compareAndSet(State.Loading, State.Ready)
+            EngineEvent.Loaded -> onReady()
             is EngineEvent.LoadFailed -> _state.value = State.Failed("The engine could not open this document (${event.kind})")
             is EngineEvent.WordCount -> _wordCount.value = event.text
             is EngineEvent.SearchResults -> _searchResults.tryEmit(event.count)
@@ -251,9 +249,37 @@ internal class OfficeDocument(private val context: Context, val file: File) {
         webView.post { webView.evaluateJavascript("window.socket.doSend();", null) }
     }
 
+    private val clipboard = context.getSystemService(ClipboardManager::class.java)
+
+    /** What the system clipboard held just after the last copy or cut inside this document. */
+    @Volatile private var lastInternalCopy: CharSequence? = null
+
+    /**
+     * The engine pastes from its own clipboard, which only knows what was copied inside this
+     * document. When the system clipboard holds something else (copied in another app), that is
+     * pasted instead. Returns true when it handled the paste.
+     */
+    private fun pasteFromSystem(): Boolean {
+        val item = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0) ?: return false
+        val text = item.coerceToText(context)
+        if (text.isNullOrEmpty() || text.toString() == lastInternalCopy?.toString()) return false
+        val html = item.htmlText
+        if (html != null) bridge.paste("text/html", html.toByteArray()) else bridge.paste("text/plain;charset=utf-8", text.toString().toByteArray())
+        return true
+    }
+
     /** Front-end to engine. Returns true to pass the message on. */
     private fun handleFrontEnd(message: String): Boolean {
         val command = message.substringBefore(' ')
+        if (command == "uno") {
+            when (message.trim()) {
+                // The copy reaches the system clipboard shortly after; remember it to recognise it.
+                "uno .uno:Copy", "uno .uno:Cut" -> webView.postDelayed({
+                    lastInternalCopy = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)
+                }, CLIPBOARD_SETTLE_MS)
+                "uno .uno:Paste" -> if (pasteFromSystem()) return false
+            }
+        }
         when (command) {
             // The page's own Save button. The app's save (which has the engine save, then writes
             // the original) runs instead, so the message is not passed on.
@@ -262,7 +288,7 @@ internal class OfficeDocument(private val context: Context, val file: File) {
             // but this is the safety net). The engine keeps running, so offer Reload rather than
             // leave a blank page.
             "BYE" -> _state.value = State.Failed("The document view was closed.")
-            "hideProgressbar" -> _state.compareAndSet(State.Loading, State.Ready)
+            "hideProgressbar" -> onReady()
             "EDITMODE" -> editing = message.substringAfter(' ', "").trim() == "on"
             "LIGHT_SCREEN", "DIM_SCREEN" -> webView.post { webView.keepScreenOn = command == "LIGHT_SCREEN" }
             // Not offered yet: printing, export, and opening links (the app is offline).
@@ -280,9 +306,41 @@ internal class OfficeDocument(private val context: Context, val file: File) {
         const val USER_NAME = "Me"
         const val SAVE_TIMEOUT_MS = 120_000L
         const val SELECTION_TIMEOUT_MS = 10_000L
+        const val CLIPBOARD_SETTLE_MS = 600L
         val BLOCKED = setOf(
             "BYE", "PRINT", "SAVE", "downloadas", "exportfile", "DIM_SCREEN", "LIGHT_SCREEN",
             "MOBILEWIZARD", "HYPERLINK", "EDITMODE", "SLIDESHOW", "hideProgressbar", "REQUESTFILECOPY",
         )
+
+        /**
+         * Zoom out / fit / zoom in buttons in the page's own toolbar, next to its (hidden in view
+         * mode) close button, doing what the front-end's desktop zoom controls do. Icons follow
+         * the page's light or dark theme.
+         */
+        val ZOOM_BUTTONS_JS = """
+            (() => {
+              const after = document.getElementById('toolbar-mobile-back');
+              if (!after || document.getElementById('libreon-zoom')) return;
+              const box = document.createElement('div');
+              box.id = 'libreon-zoom';
+              for (const [icon, label, action] of [
+                ['lc_zoomout.svg', 'Zoom out', 'zoomout'],
+                ['lc_zoomreset.svg', 'Fit to width', 'fitwidthzoom'],
+                ['lc_zoomin.svg', 'Zoom in', 'zoomin'],
+              ]) {
+                const button = document.createElement('button');
+                button.className = 'libreon-zoom-btn';
+                button.title = label;
+                button.setAttribute('aria-label', label);
+                const img = document.createElement('img');
+                img.alt = '';
+                app.LOUtil.setImage(img, icon, app.map);
+                button.appendChild(img);
+                button.addEventListener('click', (e) => { e.preventDefault(); app.dispatcher.dispatch(action); });
+                box.appendChild(button);
+              }
+              after.after(box);
+            })()
+        """.trimIndent()
     }
 }

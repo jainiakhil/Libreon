@@ -146,3 +146,16 @@ Requested after M5: file search, find in documents, word counts, PDF highlights,
 - **Beta 5:**
   - **Blank Office page** (seen on the S24, then reproduced on the emulator: edit → tick → the top-left arrow): that arrow is Collabora's *close document* button in view mode. The page tore down its document view while the engine stayed open, leaving a blank page until restart. `branding.css` now hides the arrow in view mode (in edit mode it is the tick, which stays), and if the page ever closes itself anyway the app shows *The document view was closed* with **Reload** instead of a blank page.
   - **Icon:** the cream parts of the fox were semi-transparent in the cut-out, so they turned dark on dark backgrounds. All icons and the in-app logo now come from the supplied transparent artwork, `art/Libreon_HighRes_v1.png` (the themed one-colour icon still comes from the sheet).
+
+## 0.9.5-beta.1: public beta feedback
+Requests from the first public posts (GitHub milestone *0.9.5*), all checked on the phone emulator:
+- **PowerPoint slide strip showed only some slides:** in a presentation with sections, the front-end puts each section's title bar in the strip as a full-width block, which wrapped the thumbnails onto hidden rows. `branding.css` keeps one row with a compact section label.
+- **Office zoom:** zoom out, fit and zoom in buttons are added to the document page's own toolbar (no extra bar), using the front-end's zoom actions and themed icons.
+- **Export and share as PDF:** the engine writes the PDF (`saveAs` to a file, the document is not changed); Share sends it to another app (the share sheet includes Print), Export saves it where the user picks.
+- **Copy and paste with other apps:** the engine pastes from its own clipboard, which only holds copies made inside the document, and the WebView refuses the page's clipboard reads. Paste now hands the system clipboard (HTML or text) to the engine when it holds something copied elsewhere; a copy made inside the document still pastes with its formatting.
+- **Share** any open document with its unsaved edits (a copy in the cache, through a FileProvider), and **full-screen reading** (bars hidden; back or the corner button exits).
+- **PDF zoom:** 100% is now true size, as in other PDF viewers; zoom goes from 20% of fit-width (several pages on screen) to 1600% of true size, capped so a page stays under the 2^16-pixel layout limit; presets (fit width, fit page, 50–1600%).
+- **PDF annotations:** underline and strike-out for selected text; freehand drawing, rectangles, ellipses and sticky notes. All are standard annotations whose appearance PDFium generates; tapping one selects it (a note shows its text) with Remove.
+- **PDF page tools:** in the Pages grid, long-press to select pages, then rotate, move, extract to a new PDF or delete; Insert adds every page of another PDF. Page edits make the next save a full one.
+- **Fixed:** the PDF page count was read once at open, so it went stale after page edits; opening a document that is already the active tab, from another app while Home shows, now brings it forward; the PDF selection bar scrolls when it doesn't fit.
+- Every item in the ⋮ menu has an icon; the logo also sits at the end of Settings.

@@ -20,8 +20,6 @@ internal object OfficeProtocol {
     const val FIND_CLEAR = 8
     /** arg1: request id. */
     const val GET_SELECTION = 9
-    /** arg1: [ZOOM_IN], [ZOOM_OUT] or [ZOOM_FIT]. */
-    const val ZOOM = 10
     /** Data: [KEY_PATH], the PDF to write; arg1: request id. */
     const val EXPORT_PDF = 11
 
@@ -48,11 +46,6 @@ internal object OfficeProtocol {
 
     const val FIND_BACKWARD = 1
     const val FIND_ALL = 2
-
-    const val ZOOM_IN = 1
-    const val ZOOM_OUT = 2
-    const val ZOOM_FIT = 3
-
     const val STATE_LOADING = 0
     const val STATE_READY = 1
     const val STATE_FAILED = 2

@@ -4,6 +4,7 @@ package dev.offlineoffice.app.ui.viewers.pdf
 import android.graphics.Bitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -36,6 +37,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -116,6 +120,8 @@ fun PdfPageItem(state: PdfViewerState, index: Int) {
     val current = state.searchMatches.getOrNull(state.searchIndex)
     val selection = state.selection?.takeIf { it.page == index }
     val selectedHighlight = state.selectedHighlight?.takeIf { it.page == index }
+    val ink = state.ink?.takeIf { it.page == index }
+    val shape = state.shape?.takeIf { it.page == index }
     val selectionColor = MaterialTheme.colorScheme.primary
 
     Box(
@@ -128,6 +134,24 @@ fun PdfPageItem(state: PdfViewerState, index: Int) {
                 val b = c.boundsInRoot()
                 visible = PdfLayoutMath.detailRegion(b.left - pos.x, b.top - pos.y, b.right - pos.x, b.bottom - pos.y, widthPx, heightPx)
             }
+            // Drawing tools take one-finger drags (pinching still zooms).
+            .then(
+                if (state.drawTool == null) {
+                    Modifier
+                } else {
+                    Modifier.pointerInput(index, scale, state.drawTool) {
+                        detectDragGestures(
+                            onDragStart = { state.drawStart(index, it.x / scale, it.y / scale) },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                state.drawMove(index, change.position.x / scale, change.position.y / scale)
+                            },
+                            onDragEnd = state::drawEnd,
+                            onDragCancel = state::drawEnd,
+                        )
+                    }
+                },
+            )
             .pointerInput(index) { detectTapGestures(onTap = { tap(it) }) }
             // Long press selects a word; dragging on extends the selection.
             .pointerInput(index, scale) {
@@ -157,6 +181,24 @@ fun PdfPageItem(state: PdfViewerState, index: Int) {
                 }
                 selectedHighlight?.rects?.forEach { r ->
                     drawRect(selectionColor, Offset(r.left * scale, r.top * scale), Size(r.width * scale, r.height * scale), style = Stroke(2.dp.toPx()))
+                }
+                // Drawing in progress, in the colour it will be saved in.
+                val inkColor = Color(state.inkColor)
+                val inkStroke = Stroke(PdfViewerState.INK_WIDTH * scale, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                ink?.let { draft ->
+                    (draft.strokes + listOfNotNull(draft.current)).forEach { points ->
+                        val path = Path()
+                        for (i in points.indices step 2) {
+                            if (i == 0) path.moveTo(points[0] * scale, points[1] * scale) else path.lineTo(points[i] * scale, points[i + 1] * scale)
+                        }
+                        drawPath(path, inkColor, style = inkStroke)
+                    }
+                }
+                shape?.rect?.let { r ->
+                    val topLeft = Offset(r.left * scale, r.top * scale)
+                    val box = Size(r.width * scale, r.height * scale)
+                    if (state.drawTool == DrawTool.ELLIPSE) drawOval(inkColor, topLeft, box, style = inkStroke)
+                    else drawRect(inkColor, topLeft, box, style = inkStroke)
                 }
                 drawContent()
             },

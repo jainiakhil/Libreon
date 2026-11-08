@@ -3,6 +3,7 @@ package dev.offlineoffice.app.ui.viewers.pdf
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.calculateCentroid
@@ -29,15 +30,24 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.BorderColor
+import androidx.compose.material.icons.outlined.Brush
+import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.CropSquare
 import androidx.compose.material.icons.outlined.Draw
 import androidx.compose.material.icons.outlined.EditNote
+import androidx.compose.material.icons.outlined.FormatStrikethrough
+import androidx.compose.material.icons.outlined.FormatUnderlined
+import androidx.compose.material.icons.outlined.Gesture
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material.icons.outlined.ZoomIn
 import androidx.compose.material.icons.outlined.ZoomOut
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -76,7 +86,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import dev.offlineoffice.app.session.PdfSession
+import dev.offlineoffice.app.ui.LocalFullScreen
 import dev.offlineoffice.app.text.WordCounter
+import dev.offlineoffice.pdf.AnnotType
 import dev.offlineoffice.pdf.FormType
 
 /**
@@ -96,6 +108,8 @@ fun PdfViewer(session: PdfSession) {
     val hScroll = rememberScrollState()
     val onMessage: (String) -> Unit = { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
     val state = remember(session) { PdfViewerState(session, listState, hScroll, scope, onMessage) }
+    // True size: a point is 1/72 inch, and Android draws 160 dp per inch.
+    state.actualScale = LocalDensity.current.density * 160f / 72f
     var showThumbnails by remember { mutableStateOf(false) }
     var showSignatures by remember { mutableStateOf(false) }
 
@@ -113,11 +127,13 @@ fun PdfViewer(session: PdfSession) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        PdfToolbar(
-            state = state,
-            onThumbnails = { state.commitEdit(); showThumbnails = true },
-            onSign = { state.commitEdit(); state.signatureTarget = null; showSignatures = true },
-        )
+        if (!LocalFullScreen.current) {
+            PdfToolbar(
+                state = state,
+                onThumbnails = { state.commitEdit(); state.finishDrawing(); showThumbnails = true },
+                onSign = { state.commitEdit(); state.finishDrawing(); state.signatureTarget = null; showSignatures = true },
+            )
+        }
         if (session.formType == FormType.XFA_FULL) {
             Notice("This form uses XFA, which is not supported. Only its static content is shown and it cannot be filled.")
         }
@@ -163,10 +179,14 @@ fun PdfViewer(session: PdfSession) {
             state.selection?.let { selection ->
                 Box(Modifier.align(Alignment.TopCenter).padding(8.dp)) { SelectionBar(state, selection) }
             }
-            state.selectedHighlight?.let {
+            state.selectedHighlight?.let { annotation ->
                 Box(Modifier.align(Alignment.TopCenter).padding(8.dp)) {
-                    Notice("Highlight", action = "Remove", onAction = state::removeSelectedHighlight)
+                    val label = if (annotation.type == AnnotType.NOTE) "Note: ${state.selectedNoteText.orEmpty()}" else annotation.type.label
+                    Notice(label, action = "Remove", onAction = state::removeSelectedHighlight)
                 }
+            }
+            state.drawTool?.let { tool ->
+                Box(Modifier.align(Alignment.TopCenter).padding(8.dp)) { DrawBar(state, tool) }
             }
             Surface(
                 Modifier.align(Alignment.BottomEnd).padding(12.dp),
@@ -184,13 +204,15 @@ fun PdfViewer(session: PdfSession) {
     }
 
     if (showThumbnails) {
-        ThumbnailGrid(
+        PagesSheet(
             session = session,
             current = listState.firstVisibleItemIndex,
             onPick = { page -> showThumbnails = false; state.jumpTo(page) },
             onDismiss = { showThumbnails = false },
+            onMessage = onMessage,
         )
     }
+    state.noteDraft?.let { NoteDialog(onAdd = state::addNote, onDismiss = { state.noteDraft = null }) }
     if (showSignatures) {
         SignatureSheet(
             onDismiss = { showSignatures = false; state.signatureTarget = null },
@@ -212,8 +234,8 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectPi
                     state.commitEdit()
                     state.gestureFocal = event.calculateCentroid(useCurrent = true)
                 }
-                val min = PdfSession.MIN_ZOOM / state.zoom
-                val max = PdfSession.MAX_ZOOM / state.zoom
+                val min = state.minZoom / state.zoom
+                val max = state.maxZoom / state.zoom
                 state.gestureScale = (state.gestureScale * event.calculateZoom()).coerceIn(min, max)
                 event.changes.forEach { it.consume() }
             }
@@ -225,6 +247,8 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectPi
 @Composable
 private fun PdfToolbar(state: PdfViewerState, onThumbnails: () -> Unit, onSign: () -> Unit) {
     var fillMenu by remember { mutableStateOf(false) }
+    var zoomMenu by remember { mutableStateOf(false) }
+    var annotateMenu by remember { mutableStateOf(false) }
     Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp),
@@ -234,16 +258,62 @@ private fun PdfToolbar(state: PdfViewerState, onThumbnails: () -> Unit, onSign: 
             IconButton(onClick = { state.searchOpen = !state.searchOpen; if (!state.searchOpen) state.closeSearch() }) {
                 Icon(Icons.Outlined.Search, "Search")
             }
-            IconButton(onClick = { state.zoomBy(1 / 1.25f) }, enabled = state.zoom > PdfSession.MIN_ZOOM) {
+            IconButton(onClick = { state.zoomBy(1 / 1.25f) }, enabled = state.zoom > state.minZoom * 1.001f) {
                 Icon(Icons.Outlined.ZoomOut, "Zoom out")
             }
-            Text("${(state.zoom * 100).toInt()}%", style = MaterialTheme.typography.labelLarge)
-            IconButton(onClick = { state.zoomBy(1.25f) }, enabled = state.zoom < PdfSession.MAX_ZOOM) {
+            Box {
+                TextButton(onClick = { zoomMenu = true }) { Text("${state.percent}%", style = MaterialTheme.typography.labelLarge) }
+                DropdownMenu(expanded = zoomMenu, onDismissRequest = { zoomMenu = false }) {
+                    DropdownMenuItem(text = { Text("Fit width") }, onClick = { zoomMenu = false; state.zoomTo(1f) })
+                    DropdownMenuItem(text = { Text("Fit page") }, onClick = { zoomMenu = false; state.zoomTo(state.fitPageZoom) })
+                    PdfViewerState.ZOOM_PRESETS.forEach { percent ->
+                        val zoom = state.zoomForPercent(percent)
+                        if (zoom in state.minZoom..state.maxZoom) {
+                            DropdownMenuItem(text = { Text("$percent%") }, onClick = { zoomMenu = false; state.zoomTo(zoom) })
+                        }
+                    }
+                }
+            }
+            IconButton(onClick = { state.zoomBy(1.25f) }, enabled = state.zoom < state.maxZoom * 0.999f) {
                 Icon(Icons.Outlined.ZoomIn, "Zoom in")
             }
             Spacer(Modifier.width(8.dp))
             Box {
-                TextButton(onClick = { state.commitEdit(); fillMenu = true }) {
+                TextButton(onClick = { state.commitEdit(); annotateMenu = true }) {
+                    Icon(Icons.Outlined.Brush, null, Modifier.size(20.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Annotate")
+                }
+                DropdownMenu(expanded = annotateMenu, onDismissRequest = { annotateMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Draw") },
+                        leadingIcon = { Icon(Icons.Outlined.Gesture, null) },
+                        onClick = { annotateMenu = false; state.startDrawing(DrawTool.INK) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Rectangle") },
+                        leadingIcon = { Icon(Icons.Outlined.CropSquare, null) },
+                        onClick = { annotateMenu = false; state.startDrawing(DrawTool.RECT) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Ellipse") },
+                        leadingIcon = { Icon(Icons.Outlined.Circle, null) },
+                        onClick = { annotateMenu = false; state.startDrawing(DrawTool.ELLIPSE) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Note") },
+                        leadingIcon = { Icon(Icons.Outlined.StickyNote2, null) },
+                        onClick = { annotateMenu = false; state.finishDrawing(); state.tool = PlaceTool.NOTE },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Highlight or underline text") },
+                        leadingIcon = { Icon(Icons.Outlined.BorderColor, null) },
+                        onClick = { annotateMenu = false; state.showMessage("Long-press a word and drag to select text, then choose a highlight colour, underline or strike-out.") },
+                    )
+                }
+            }
+            Box {
+                TextButton(onClick = { state.commitEdit(); state.finishDrawing(); fillMenu = true }) {
                     Icon(Icons.Outlined.EditNote, null, Modifier.size(20.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("Fill")
@@ -308,7 +378,8 @@ private fun SelectionBar(state: PdfViewerState, selection: PdfTextSelection) {
     val clipboard = LocalClipboardManager.current
     val words = remember(selection.text) { WordCounter.count(selection.text) }
     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer, shadowElevation = 4.dp) {
-        Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        // Scrolls sideways when the colours and actions do not fit a phone in portrait.
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (words == 1) "1 word" else "$words words", Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelLarge)
             TextButton(onClick = { clipboard.setText(AnnotatedString(selection.text.trim())); state.clearSelection() }) { Text("Copy") }
             PdfViewerState.HIGHLIGHT_COLORS.forEachIndexed { i, argb ->
@@ -320,9 +391,68 @@ private fun SelectionBar(state: PdfViewerState, selection: PdfTextSelection) {
                         .clickable(onClickLabel = "Highlight in ${HIGHLIGHT_NAMES[i]}", role = Role.Button) { state.highlightSelection(argb) },
                 )
             }
+            IconButton(onClick = { state.highlightSelection(UNDERLINE_COLOR, AnnotType.UNDERLINE) }) {
+                Icon(Icons.Outlined.FormatUnderlined, "Underline")
+            }
+            IconButton(onClick = { state.highlightSelection(STRIKE_COLOR, AnnotType.STRIKEOUT) }) {
+                Icon(Icons.Outlined.FormatStrikethrough, "Strike out")
+            }
             IconButton(onClick = state::clearSelection) { Icon(Icons.Outlined.Close, "Clear selection") }
         }
     }
+}
+
+private const val UNDERLINE_COLOR = 0xFF1E88E5.toInt()
+private const val STRIKE_COLOR = 0xFFE53935.toInt()
+
+/** While a drawing tool is on: its hint, colour choices and Done. */
+@Composable
+private fun DrawBar(state: PdfViewerState, tool: DrawTool) {
+    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer, shadowElevation = 4.dp) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+            Text(tool.hint, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodyMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                PdfViewerState.INK_COLORS.forEachIndexed { i, argb ->
+                    val chosen = state.inkColor == argb
+                    Box(
+                        Modifier
+                            .minimumInteractiveComponentSize()
+                            .size(if (chosen) 30.dp else 24.dp)
+                            .background(Color(argb), CircleShape)
+                            .border(if (chosen) 3.dp else 0.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                            .clickable(onClickLabel = "Draw in ${INK_NAMES[i]}", role = Role.RadioButton) { state.inkColor = argb },
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = state::finishDrawing) { Text("Done") }
+            }
+        }
+    }
+}
+
+private val INK_NAMES = listOf("red", "blue", "green", "black")
+
+/** Asks for a new note's text. */
+@Composable
+private fun NoteDialog(onAdd: (String) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf("") }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add a note") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                modifier = Modifier.focusRequester(focus),
+                placeholder = { Text("Note") },
+                minLines = 3,
+            )
+        },
+        confirmButton = { TextButton(onClick = { onAdd(text) }, enabled = text.isNotBlank()) { Text("Add") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 private val HIGHLIGHT_NAMES = listOf("yellow", "green", "blue", "pink")

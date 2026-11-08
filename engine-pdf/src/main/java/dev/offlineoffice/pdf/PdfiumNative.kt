@@ -82,12 +82,34 @@ internal object PdfiumNative {
     /** [l, t, r, b, ...] covering [count] characters from [start]. */
     @JvmStatic external fun textRects(handle: Long, index: Int, start: Int, count: Int): FloatArray
 
-    @JvmStatic external fun addHighlight(handle: Long, index: Int, rects: FloatArray, color: Int, contents: String): Boolean
+    /** Text markup of PDFium [subtype] (highlight, underline, strike-out or squiggly). */
+    @JvmStatic external fun addHighlight(handle: Long, index: Int, subtype: Int, rects: FloatArray, color: Int, contents: String): Boolean
 
-    /** [count, then per highlight: annotIndex, red, green, blue, rectCount, l, t, r, b, ...]. */
+    /** [count, then per annotation: annotIndex, subtype, red, green, blue, rectCount, l, t, r, b, ...]. */
     @JvmStatic external fun highlights(handle: Long, index: Int): FloatArray
 
+    @JvmStatic external fun annotContents(handle: Long, index: Int, annotIndex: Int): String?
+
     @JvmStatic external fun removeAnnot(handle: Long, index: Int, annotIndex: Int): Boolean
+
+    /** [strokes] = [pointCount, x, y, ..., pointCount, ...] in display points. */
+    @JvmStatic external fun addInk(handle: Long, index: Int, strokes: FloatArray, color: Int, width: Float): Boolean
+
+    @JvmStatic external fun addShape(handle: Long, index: Int, subtype: Int, left: Float, top: Float, right: Float, bottom: Float, color: Int, width: Float): Boolean
+
+    @JvmStatic external fun addNote(handle: Long, index: Int, x: Float, y: Float, contents: String, color: Int): Boolean
+
+    @JvmStatic external fun deletePages(handle: Long, indices: IntArray): Boolean
+
+    @JvmStatic external fun rotatePages(handle: Long, indices: IntArray, quarterTurns: Int): Boolean
+
+    @JvmStatic external fun movePages(handle: Long, indices: IntArray, destIndex: Int): Boolean
+
+    /** Pages inserted, or a negative PDFium error. [srcFd] is not closed. */
+    @JvmStatic external fun importPages(handle: Long, srcFd: Int, length: Long, insertAt: Int): Int
+
+    /** Writes a new PDF of the pages at [indices] to [fd] (not closed). */
+    @JvmStatic external fun extractPages(handle: Long, indices: IntArray, fd: Int): Boolean
 
     /** Writes a copy of the document to [fd] (not closed). */
     @JvmStatic external fun save(handle: Long, fd: Int, incremental: Boolean): Boolean

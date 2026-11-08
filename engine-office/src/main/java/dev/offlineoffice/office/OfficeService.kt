@@ -52,7 +52,6 @@ class OfficeService : Service() {
             )
             P.FIND_CLEAR -> document?.clearFind()
             P.GET_SELECTION -> selection(msg.arg1)
-            P.ZOOM -> document?.zoom(msg.arg1)
             P.EXPORT_PDF -> exportPdf(msg.arg1, File(checkNotNull(msg.data.getString(P.KEY_PATH))))
         }
     }

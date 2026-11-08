@@ -24,6 +24,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -75,6 +78,10 @@ class TabManager(
 
     private val _activeId = MutableStateFlow<String?>(null)
     val activeId: StateFlow<String?> = _activeId.asStateFlow()
+
+    /** Emits each time a tab is brought forward, even the one already active (e.g. reopened from another app). */
+    private val _activations = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val activations: SharedFlow<String> = _activations.asSharedFlow()
 
     private val _sessions = MutableStateFlow<Map<String, SessionState>>(emptyMap())
     val sessions: StateFlow<Map<String, SessionState>> = _sessions.asStateFlow()
@@ -146,6 +153,7 @@ class TabManager(
             mutex.withLock {
                 val tab = _tabs.value.firstOrNull { it.id == id } ?: return@withLock
                 _activeId.value = id
+                _activations.tryEmit(id)
                 updateTab(tab.copy(lastActiveAt = System.currentTimeMillis()))
                 if (_sessions.value[id] !is SessionState.Ready) {
                     makeRoomFor(tab)

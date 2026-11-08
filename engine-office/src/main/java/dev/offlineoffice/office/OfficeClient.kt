@@ -167,10 +167,6 @@ class OfficeClient(context: Context) {
         }
     }
 
-    fun zoomIn() = send(P.ZOOM, P.ZOOM_IN)
-    fun zoomOut() = send(P.ZOOM, P.ZOOM_OUT)
-    fun zoomToFit() = send(P.ZOOM, P.ZOOM_FIT)
-
     /** Has the engine write the document, with any unsaved edits, as a PDF to [target]. */
     suspend fun exportPdf(target: File) = withContext(Dispatchers.Main) {
         val id = ++nextSaveId

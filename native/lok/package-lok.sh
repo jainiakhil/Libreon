@@ -45,7 +45,15 @@ cat > "$OUT/assets/dist/branding.css" <<'CSS'
 /* The top-left toolbar button: a tick in edit mode (back to reading, kept), but in view mode it
    closes the document, which in our app leaves a blank page. The app's own Home button and back
    gesture replace it there. */
-#toolbar-mobile-back.editmode-off { visibility: hidden !important; pointer-events: none !important; }
+#toolbar-mobile-back.editmode-off { display: none !important; }
+/* Zoom buttons the app adds to the page's toolbar (OfficeDocument.ZOOM_BUTTONS_JS). */
+#libreon-zoom { display: flex !important; align-items: center; gap: 2px; padding-left: 4px; }
+#libreon-zoom .libreon-zoom-btn {
+  width: 36px !important; height: 34px !important; padding: 5px !important; margin: 0 !important;
+  border: none !important; background: transparent !important; box-shadow: none !important; border-radius: 6px;
+}
+#libreon-zoom .libreon-zoom-btn:active { background: rgba(127, 127, 127, 0.25) !important; }
+#libreon-zoom .libreon-zoom-btn img { width: 24px; height: 24px; }
 /* PowerPoint's slide strip (portrait): in a presentation with sections, each section's title bar
    sits in the strip as a full-width block and wraps the thumbnails onto rows below the visible
    strip. Keep one row, with a compact section label before each section's slides. */
