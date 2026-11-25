@@ -5,7 +5,7 @@
 
 <p align="center">
   <a href="https://github.com/jainiakhil/Libreon/releases/latest"><img src="https://img.shields.io/badge/Download-Latest%20APK-2ea44f?style=for-the-badge&logo=android&logoColor=white" alt="Download the latest APK"></a>
-  <a href="https://jainiakhil.github.io/Libreon/"><img src="https://img.shields.io/badge/Website-jainiakhil.github.io%2FLibreon-fc4e2b?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Visit the Libreon website"></a>
+  <a href="https://libreon.pages.dev/"><img src="https://img.shields.io/badge/Website-libreon.pages.dev-fc4e2b?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Visit the Libreon website"></a>
   <br><sub>Under <b>Assets</b>, pick the <code>arm64-v8a</code> APK: it's the one for almost every phone. <a href="#install">Install help</a></sub>
 </p>
 
